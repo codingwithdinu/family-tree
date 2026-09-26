@@ -16,6 +16,7 @@ export function TreeWorkspace({ family, initialPeople, initialRelationships, rol
   const [relationships, setRelationships] = useState(initialRelationships);
   const [selected, setSelected] = useState<Person | null>(null);
   const [peopleSearch, setPeopleSearch] = useState("");
+  const [newMemberSide, setNewMemberSide] = useState<"left"|"right">("right");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   useEffect(()=>{const mq=window.matchMedia("(max-width: 767px)");const sync=()=>{setIsMobile(mq.matches);if(mq.matches)setSidebarCollapsed(true);};sync();mq.addEventListener("change",sync);return()=>mq.removeEventListener("change",sync);},[]);
@@ -54,6 +55,7 @@ export function TreeWorkspace({ family, initialPeople, initialRelationships, rol
     const relatedPersonId = String(formData.get("related_person_id") ?? "");
     const relation = String(formData.get("relation") ?? "none");
     const parentRole = String(formData.get("parent_role") ?? "biological");
+    const placementSide = String(formData.get("placement_side") ?? "right")==="left"?"left":"right";
     if (!name) { setError("Please enter a name."); setBusy(false); return; }
     if (relation !== "none" && (!relatedPersonId || !people.some(p => p.id === relatedPersonId))) {
       setError("Please choose which family member this person is related to."); setBusy(false); return;
@@ -89,10 +91,22 @@ export function TreeWorkspace({ family, initialPeople, initialRelationships, rol
         }
         rel = data;
       }
+      // Save an initial visual position relative to the chosen family member.
+      // Existing manually arranged positions are preserved.
+      const savedLayout:Record<string,{x:number;y:number}>={};
+      diagramNodes.forEach(n=>{savedLayout[n.id]=n.position;});
+      const anchor=diagramNodes.find(n=>n.id===relatedPersonId);
+      if(anchor && relation!=="none"){
+        const horizontal=placementSide==="left"?-260:260;
+        const vertical=relation==="child"?380:relation==="parent"?-380:0;
+        savedLayout[person.id]={x:anchor.position.x+horizontal,y:anchor.position.y+vertical};
+      }
+      if(Object.keys(savedLayout).length)localStorage.setItem("vansh-tree-layout:"+family.id,JSON.stringify(savedLayout));
       setPeople(old => [...old, person]);
       if (rel) setRelationships(old => [...old, rel!]);
       setShowAdd(false);
       setSelected(person);
+      setNewMemberSide("right");
     } catch (e) { setError(e instanceof Error ? e.message : "Could not save this person."); }
     finally { setBusy(false); }
   }
@@ -220,6 +234,7 @@ export function TreeWorkspace({ family, initialPeople, initialRelationships, rol
         <p className="mt-1 text-xs leading-5 text-[#879184]">Choose the relationship to another person already in your family tree.</p>
         <label className="mt-4 block text-sm font-medium">Relationship<select name="relation" defaultValue={addRelation} className="mt-2 w-full rounded-xl border border-[#dfe4da] bg-white px-4 py-3"><option value="none">Not connected yet</option><option value="parent">Parent of selected member (father / mother)</option><option value="child">Child of selected member (son / daughter)</option><option value="spouse">Spouse (wife / husband)</option><option value="partner">Partner</option></select></label>
         <label className="mt-4 block text-sm font-medium">Connect to family member<select name="related_person_id" defaultValue={selected?.id ?? ""} className="mt-2 w-full rounded-xl border border-[#dfe4da] bg-white px-4 py-3"><option value="">Choose a person</option>{people.map(p=><option key={p.id} value={p.id}>{p.native_name||p.display_name}</option>)}</select></label>
+        <fieldset className="mt-4"><legend className="text-sm font-medium">Place new member on which side?</legend><div className="mt-2 grid grid-cols-2 gap-2"><label className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold ${newMemberSide==="left"?"border-[#315b3c] bg-[#edf2e8] text-[#315b3c]":"border-[#dfe4da] bg-white text-[#596456]"}`}><input type="radio" name="placement_side" value="left" checked={newMemberSide==="left"} onChange={()=>setNewMemberSide("left")} className="accent-[#315b3c]"/>← Left side</label><label className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold ${newMemberSide==="right"?"border-[#315b3c] bg-[#edf2e8] text-[#315b3c]":"border-[#dfe4da] bg-white text-[#596456]"}`}><input type="radio" name="placement_side" value="right" checked={newMemberSide==="right"} onChange={()=>setNewMemberSide("right")} className="accent-[#315b3c]"/>Right side →</label></div><p className="mt-1 text-xs text-[#879184]">Sets the new member's initial position relative to the selected family member. You can still drag them later.</p></fieldset>
         <label className="mt-4 block text-sm font-medium">Parent relationship type<select name="parent_role" defaultValue="biological" className="mt-2 w-full rounded-xl border border-[#dfe4da] bg-white px-4 py-3"><option value="biological">Biological</option><option value="adoptive">Adoptive</option><option value="step">Step-parent</option><option value="foster">Foster</option><option value="legal">Legal guardian</option><option value="unknown">Unknown</option></select><span className="mt-1 block text-xs font-normal text-[#8a9385]">Used when you choose a parent or child relationship.</span></label>
       </div>
       {error && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}<button disabled={busy} className="mt-6 w-full rounded-full bg-[#244b38] px-6 py-3.5 font-semibold text-white disabled:opacity-60">{busy?"Saving...":"Save family member"}</button></form></div>}
