@@ -158,12 +158,23 @@ function buildGraph(people: Person[], relationships: Relationship[], onAddRelati
   const valid = new Set(people.map(p=>p.id));
   const parents = new Map<string,string[]>(); const children = new Map<string,string[]>();
   for(const r of relationships.filter(r=>r.relationship_type==="parent_child"&&valid.has(r.from_person_id)&&valid.has(r.to_person_id))){parents.set(r.to_person_id,[...(parents.get(r.to_person_id)??[]),r.from_person_id]);children.set(r.from_person_id,[...(children.get(r.from_person_id)??[]),r.to_person_id]);}
-  const depth = new Map<string,number>(); const queue = people.filter(p=>(parents.get(p.id)??[]).length===0).map(p=>({id:p.id,d:0}));
+  const depth=new Map<string,number>();
+  const queue=people.filter(p=>(parents.get(p.id)??[]).length===0).map(p=>({id:p.id,d:0}));
   while(queue.length){const item=queue.shift()!;if(depth.has(item.id))continue;depth.set(item.id,item.d);for(const child of children.get(item.id)??[])queue.push({id:child,d:item.d+1});}
   for(const p of people)if(!depth.has(p.id))depth.set(p.id,0);
+  const unions=relationships.filter(r=>["spouse","partner"].includes(r.relationship_type)&&valid.has(r.from_person_id)&&valid.has(r.to_person_id));
+  for(let pass=0;pass<people.length;pass++)for(const r of unions){const d=Math.min(depth.get(r.from_person_id)??0,depth.get(r.to_person_id)??0);depth.set(r.from_person_id,d);depth.set(r.to_person_id,d);}
   const groups=new Map<number,Person[]>();for(const p of people){const d=depth.get(p.id)??0;groups.set(d,[...(groups.get(d)??[]),p]);}
-  for(const row of groups.values())for(let i=0;i<row.length;i++){const r=relationships.find(r=>["spouse","partner"].includes(r.relationship_type)&&((r.from_person_id===row[i].id&&row.some(p=>p.id===r.to_person_id))||(r.to_person_id===row[i].id&&row.some(p=>p.id===r.from_person_id))));if(r){const id=r.from_person_id===row[i].id?r.to_person_id:r.from_person_id;const j=row.findIndex(p=>p.id===id);if(j>=0&&j!==i+1){const [partner]=row.splice(j,1);row.splice(i+1,0,partner);}}}
-  const nodes:Node[]=people.map(p=>{const d=depth.get(p.id)??0;const row=groups.get(d)??[];const i=row.findIndex(x=>x.id===p.id);return {id:p.id,position:{x:i*250-(row.length-1)*125,y:d*220},style:{width:196,border:"none",background:"transparent",padding:0},data:{label:
+  const orderedByDepth=new Map<number,Person[]>();
+  for(const [d,row] of groups){const remaining=new Map(row.map(p=>[p.id,p]));const ordered:Person[]=[];
+    while(remaining.size){const first=remaining.values().next().value as Person;const union=unions.find(r=>(r.from_person_id===first.id&&remaining.has(r.to_person_id))||(r.to_person_id===first.id&&remaining.has(r.from_person_id)));
+      if(!union){ordered.push(first);remaining.delete(first.id);continue;}
+      const otherId=union.from_person_id===first.id?union.to_person_id:union.from_person_id;const other=remaining.get(otherId)!;
+      const left=other.gender==="male"&&first.gender!=="male"?other:first;const right=left.id===first.id?other:first;
+      ordered.push(left,right);remaining.delete(first.id);remaining.delete(other.id);
+    }orderedByDepth.set(d,ordered);
+  }
+  const nodes:Node[]=people.map(p=>{const d=depth.get(p.id)??0;const row=orderedByDepth.get(d)??[];const i=row.findIndex(x=>x.id===p.id);return {id:p.id,position:{x:i*260-(row.length-1)*130,y:d*300},style:{width:196,border:"none",background:"transparent",padding:0},data:{label:
     <div className="relative w-[196px] rounded-2xl border border-[#dce4d6] bg-[#fffefa] px-3 pb-4 pt-4 text-center shadow-[0_8px_24px_rgba(35,60,42,.10)] transition hover:border-[#8fa986] hover:shadow-[0_12px_30px_rgba(35,60,42,.16)]">
       <button type="button" aria-label={`Add parent of ${p.display_name}`} title="Add parent" onClick={e=>{e.stopPropagation();onAddRelative(p.id,"parent");}} className="nodrag nopan absolute -top-3 left-1/2 z-10 grid h-7 w-7 -translate-x-1/2 place-items-center rounded-full border-2 border-white bg-[#e67e22] text-lg font-medium leading-none text-white shadow-md transition hover:scale-110">+</button>
       <button type="button" aria-label={`Add parent of ${p.display_name}`} title="Add parent" onClick={e=>{e.stopPropagation();onAddRelative(p.id,"parent");}} className="nodrag nopan absolute -left-3 top-1/2 z-10 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full border-2 border-white bg-[#e67e22] text-lg leading-none text-white shadow-md transition hover:scale-110">+</button>
