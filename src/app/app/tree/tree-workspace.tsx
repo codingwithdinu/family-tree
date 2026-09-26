@@ -173,6 +173,25 @@ function buildGraph(people: Person[], relationships: Relationship[], onAddRelati
       <button type="button" aria-label={`Add child of ${p.display_name}`} title="Add child" onClick={e=>{e.stopPropagation();onAddRelative(p.id,"child");}} className="nodrag nopan absolute -bottom-3 left-1/2 z-10 grid h-7 w-7 -translate-x-1/2 place-items-center rounded-full border-2 border-white bg-[#e67e22] text-lg leading-none text-white shadow-md transition hover:scale-110">+</button>
       <button type="button" aria-label={`Add spouse or partner of ${p.display_name}`} title="Add spouse / partner" onClick={e=>{e.stopPropagation();onAddRelative(p.id,"spouse");}} className="nodrag nopan absolute -right-3 top-1/2 z-10 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full border-2 border-white bg-[#e67e22] text-lg leading-none text-white shadow-md transition hover:scale-110">+</button>
     </div>},type:"default"};});
-  const edges:Edge[]=relationships.filter(r=>valid.has(r.from_person_id)&&valid.has(r.to_person_id)).map(r=>({id:r.id,source:r.from_person_id,target:r.to_person_id,type:r.relationship_type==="spouse"||r.relationship_type==="partner"?"straight":"smoothstep",label:r.relationship_type==="spouse"?"Spouse":r.relationship_type==="partner"?"Partner":undefined,labelStyle:{fill:"#71816c",fontSize:10,fontWeight:600},labelBgStyle:{fill:"#fffefa",fillOpacity:.95},style:{stroke:r.relationship_type==="spouse"||r.relationship_type==="partner"?"#d28b43":"#9bad92",strokeWidth:r.relationship_type==="spouse"||r.relationship_type==="partner"?2:1.8}}));
+  const parentLinks=relationships.filter(r=>r.relationship_type==="parent_child"&&valid.has(r.from_person_id)&&valid.has(r.to_person_id));
+  const parentsByChild=new Map<string,string[]>();
+  for(const r of parentLinks)parentsByChild.set(r.to_person_id,[...(parentsByChild.get(r.to_person_id)??[]),r.from_person_id]);
+  const junctionEdges:Edge[]=[];
+  const pairedChildIds=new Set<string>();
+  for(const [childId,parentIds] of parentsByChild){
+    const uniqueParents=[...new Set(parentIds)];
+    if(uniqueParents.length<2)continue;
+    const parentA=nodes.find(n=>n.id===uniqueParents[0]);const parentB=nodes.find(n=>n.id===uniqueParents[1]);const child=nodes.find(n=>n.id===childId);
+    if(!parentA||!parentB||!child)continue;
+    const junctionId=`family-junction-${childId}`;pairedChildIds.add(childId);
+    nodes.push({id:junctionId,position:{x:(parentA.position.x+parentB.position.x)/2+98,y:child.position.y-78},data:{label:<div aria-hidden="true" className="h-px w-px opacity-0" />},style:{width:1,height:1,opacity:0,padding:0,border:0,background:"transparent",pointerEvents:"none"},draggable:false,selectable:false,connectable:false,focusable:false,type:"default"});
+    junctionEdges.push({id:`parent-${uniqueParents[0]}-${junctionId}`,source:uniqueParents[0],target:junctionId,type:"smoothstep",sourceHandle:"bottom",targetHandle:null,style:{stroke:"#9bad92",strokeWidth:1.8}});
+    junctionEdges.push({id:`parent-${uniqueParents[1]}-${junctionId}`,source:uniqueParents[1],target:junctionId,type:"smoothstep",sourceHandle:"bottom",targetHandle:null,style:{stroke:"#9bad92",strokeWidth:1.8}});
+    junctionEdges.push({id:`${junctionId}-child-${childId}`,source:junctionId,target:childId,type:"smoothstep",targetHandle:"top",style:{stroke:"#9bad92",strokeWidth:1.8}});
+  }
+  const edges:Edge[]=[
+    ...relationships.filter(r=>valid.has(r.from_person_id)&&valid.has(r.to_person_id)&&!(r.relationship_type==="parent_child"&&pairedChildIds.has(r.to_person_id))).map(r=>({id:r.id,source:r.from_person_id,target:r.to_person_id,type:r.relationship_type==="spouse"||r.relationship_type==="partner"?"straight" as const:"smoothstep" as const,sourceHandle:r.relationship_type==="parent_child"?"bottom":undefined,targetHandle:r.relationship_type==="parent_child"?"top":undefined,label:r.relationship_type==="spouse"?"Spouse":r.relationship_type==="partner"?"Partner":undefined,labelStyle:{fill:"#71816c",fontSize:10,fontWeight:600},labelBgStyle:{fill:"#fffefa",fillOpacity:.95},style:{stroke:r.relationship_type==="spouse"||r.relationship_type==="partner"?"#d28b43":"#9bad92",strokeWidth:r.relationship_type==="spouse"||r.relationship_type==="partner"?2:1.8}})),
+    ...junctionEdges
+  ];
   return {nodes,edges};
 }
