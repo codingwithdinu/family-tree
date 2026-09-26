@@ -24,7 +24,7 @@ export function TreeWorkspace({ family, initialPeople, initialRelationships, rol
   const graph = useMemo(() => buildGraph(people, relationships, (personId, relation) => { const person = people.find(p => p.id === personId); if (person) { setSelected(person); setAddRelation(relation); setShowAdd(true); setError(""); } }), [people, relationships]);
   const [diagramNodes, setDiagramNodes, onNodesChange] = useNodesState(graph.nodes);
   useEffect(() => { let saved: Record<string,{x:number;y:number}> = {}; try { saved = JSON.parse(localStorage.getItem("vansh-tree-layout:"+family.id) || "{}"); } catch {} setDiagramNodes(current => { const previous = new Map(current.map(n => [n.id, n.position])); return graph.nodes.map(n => ({...n, position: saved[n.id] ?? previous.get(n.id) ?? n.position})); }); }, [graph.nodes, setDiagramNodes, family.id]);
-  function resetDiagramLayout() { localStorage.removeItem("vansh-tree-layout:"+family.id); setDiagramNodes(graph.nodes); }
+  function resetDiagramLayout() { localStorage.removeItem("vansh-tree-layout:"+family.id); setDiagramNodes(graph.nodes.map(n=>({...n,position:{...n.position}}))); }
 
   async function addPerson(formData: FormData) {
     setBusy(true); setError("");
@@ -157,12 +157,12 @@ export function TreeWorkspace({ family, initialPeople, initialRelationships, rol
 function buildGraph(people: Person[], relationships: Relationship[], onAddRelative: (personId: string, relation: "parent" | "child" | "spouse") => void): {nodes: Node[]; edges: Edge[]} {
   const valid = new Set(people.map(p=>p.id));
   const parents = new Map<string,string[]>(); const children = new Map<string,string[]>();
-  for(const r of relationships.filter(r=>r.relationship_type==="parent_child"&&valid.has(r.from_person_id)&&valid.has(r.to_person_id))){parents.set(r.to_person_id,[...(parents.get(r.to_person_id)??[]),r.from_person_id]);children.set(r.from_person_id,[...(children.get(r.from_person_id)??[]),r.to_person_id]);}
+  for(const r of relationships.filter(r=>["parent_child","parent-child","parentchild"].includes(r.relationship_type.toLowerCase().replace(/\s+/g,""))&&valid.has(r.from_person_id)&&valid.has(r.to_person_id))){parents.set(r.to_person_id,[...(parents.get(r.to_person_id)??[]),r.from_person_id]);children.set(r.from_person_id,[...(children.get(r.from_person_id)??[]),r.to_person_id]);}
   const depth=new Map<string,number>();
   const queue=people.filter(p=>(parents.get(p.id)??[]).length===0).map(p=>({id:p.id,d:0}));
   while(queue.length){const item=queue.shift()!;if(depth.has(item.id))continue;depth.set(item.id,item.d);for(const child of children.get(item.id)??[])queue.push({id:child,d:item.d+1});}
   for(const p of people)if(!depth.has(p.id))depth.set(p.id,0);
-  const unions=relationships.filter(r=>["spouse","partner"].includes(r.relationship_type)&&valid.has(r.from_person_id)&&valid.has(r.to_person_id));
+  const unions=relationships.filter(r=>["spouse","partner","marriage"].includes(r.relationship_type.toLowerCase())&&valid.has(r.from_person_id)&&valid.has(r.to_person_id));
   for(let pass=0;pass<people.length;pass++)for(const r of unions){const d=Math.min(depth.get(r.from_person_id)??0,depth.get(r.to_person_id)??0);depth.set(r.from_person_id,d);depth.set(r.to_person_id,d);}
   const groups=new Map<number,Person[]>();for(const p of people){const d=depth.get(p.id)??0;groups.set(d,[...(groups.get(d)??[]),p]);}
   const orderedByDepth=new Map<number,Person[]>();
