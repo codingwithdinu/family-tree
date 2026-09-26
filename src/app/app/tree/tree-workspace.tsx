@@ -30,6 +30,16 @@ export function TreeWorkspace({ family, initialPeople, initialRelationships, rol
   const dragStartRef = useRef<{id:string; x:number; y:number} | null>(null);
   useEffect(() => { let saved: Record<string,{x:number;y:number}> = {}; try { saved = JSON.parse(localStorage.getItem("vansh-tree-layout:"+family.id) || "{}"); } catch {} setDiagramNodes(current => { const previous = new Map(current.map(n => [n.id, n.position])); return graph.nodes.map(n => ({...n, position: saved[n.id] ?? previous.get(n.id) ?? n.position})); }); }, [graph.nodes, setDiagramNodes, family.id]);
   function resetDiagramLayout() { localStorage.removeItem("vansh-tree-layout:"+family.id); const arranged = graph.nodes.map(n=>({...n,position:{...n.position}})); setDiagramNodes(arranged); setLayoutVersion(v=>v+1); }
+  function alignGenerationsOnly() {
+    const generationY=new Map(graph.nodes.map(n=>[n.id,n.position.y]));
+    setDiagramNodes(current=>{
+      const updated=current.map(n=>({...n,position:{x:n.position.x,y:generationY.get(n.id)??n.position.y}}));
+      const saved:Record<string,{x:number;y:number}>={};
+      updated.forEach(n=>{saved[n.id]=n.position;});
+      localStorage.setItem("vansh-tree-layout:"+family.id,JSON.stringify(saved));
+      return updated;
+    });
+  }
 
   async function addPerson(formData: FormData) {
     setBusy(true); setError("");
@@ -150,7 +160,7 @@ export function TreeWorkspace({ family, initialPeople, initialRelationships, rol
     </header>
     <div className="grid min-h-[calc(100vh-73px)] lg:grid-cols-[1fr_310px]">
       <section className="relative min-h-[70vh] border-b border-[#e7e9e0] lg:border-b-0 lg:border-r">
-        <div className="absolute left-5 top-5 z-10 flex items-center gap-3 rounded-2xl border border-[#e6e9e0] bg-white/95 px-4 py-3 shadow-sm"><div><p className="text-xs text-[#879184]">Family members</p><p className="text-xl font-semibold">{people.length}</p></div>{canEdit&&<><button type="button" onClick={resetDiagramLayout} title="Restore automatic generation layout" className="rounded-xl border border-[#dce2d7] bg-[#f8f9f5] px-3 py-2 text-xs font-semibold text-[#456342] hover:bg-[#edf2e8]">Auto arrange</button><label className="flex cursor-pointer items-center gap-2 whitespace-nowrap text-xs font-medium text-[#456342]" title="When moving a person, move their descendants and connected spouses with them"><input type="checkbox" checked={moveBranchTogether} onChange={e=>setMoveBranchTogether(e.target.checked)} className="h-4 w-4 accent-[#315b3c]"/>Move branch together</label></>}</div>
+        <div className="absolute left-5 top-5 z-10 flex items-center gap-3 rounded-2xl border border-[#e6e9e0] bg-white/95 px-4 py-3 shadow-sm"><div><p className="text-xs text-[#879184]">Family members</p><p className="text-xl font-semibold">{people.length}</p></div>{canEdit&&<><button type="button" onClick={resetDiagramLayout} title="Restore automatic generation layout" className="rounded-xl border border-[#dce2d7] bg-[#f8f9f5] px-3 py-2 text-xs font-semibold text-[#456342] hover:bg-[#edf2e8]">Auto arrange</button><button type="button" onClick={alignGenerationsOnly} title="Align generation rows vertically without changing your horizontal arrangement" className="rounded-xl border border-[#dce2d7] bg-white px-3 py-2 text-xs font-semibold text-[#456342] hover:bg-[#edf2e8]">Align generations</button><label className="flex cursor-pointer items-center gap-2 whitespace-nowrap text-xs font-medium text-[#456342]" title="When moving a person, move their descendants and connected spouses with them"><input type="checkbox" checked={moveBranchTogether} onChange={e=>setMoveBranchTogether(e.target.checked)} className="h-4 w-4 accent-[#315b3c]"/>Move branch together</label></>}</div>
         {people.length === 0 ? <div className="absolute inset-0 grid place-items-center p-6"><div className="max-w-sm text-center"><div className="mx-auto grid h-16 w-16 place-items-center rounded-3xl bg-[#e9efe3] text-3xl text-[#54734f]">♧</div><h2 className="mt-5 text-2xl font-semibold">Your family story starts here</h2><p className="mt-3 text-sm leading-6 text-[#768073]">Add yourself or a family member. Then connect parents, spouses and children to grow your tree.</p>{canEdit && <button onClick={() => setShowAdd(true)} className="mt-6 rounded-full bg-[#244b38] px-6 py-3 text-sm font-semibold text-white">Add your first member</button>}</div></div> : <ReactFlow key={layoutVersion} nodes={diagramNodes} edges={graph.edges} onNodesChange={onNodesChange} onNodeDragStart={(_,node)=>{dragStartRef.current={id:node.id,x:node.position.x,y:node.position.y};}} onNodeDragStop={(_, node) => {
           const start=dragStartRef.current; dragStartRef.current=null;
           const dx=start&&start.id===node.id?node.position.x-start.x:0;
