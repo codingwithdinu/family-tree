@@ -216,41 +216,72 @@ function buildGraph(people: Person[], relationships: Relationship[], photoUrls: 
   const depth=new Map<string,number>();
   for(const p of people)depth.set(p.id,componentDepth.get(find(p.id))??0);
   const groups=new Map<number,Person[]>();for(const p of people){const d=depth.get(p.id)??0;groups.set(d,[...(groups.get(d)??[]),p]);}
-  const orderedByDepth=new Map<number,Person[]>();
-  for(const [d,row] of groups){const remaining=new Map(row.map(p=>[p.id,p]));const ordered:Person[]=[];
-    while(remaining.size){const first=remaining.values().next().value as Person;const union=unions.find(r=>(r.from_person_id===first.id&&remaining.has(r.to_person_id))||(r.to_person_id===first.id&&remaining.has(r.from_person_id)));
-      if(!union){ordered.push(first);remaining.delete(first.id);continue;}
-      const otherId=union.from_person_id===first.id?union.to_person_id:union.from_person_id;const other=remaining.get(otherId)!;
-      const left=other.gender==="male"&&first.gender!=="male"?other:first;const right=left.id===first.id?other:first;
-      ordered.push(left,right);remaining.delete(first.id);remaining.delete(other.id);
-    }orderedByDepth.set(d,ordered);
+  // Build horizontal family units: each spouse/partner pair occupies one unit
+  // with husband on the left and wife on the right, while children are laid out
+  // as sibling units beneath their parent couple.
+  const personUnit=new Map<string,string>();
+  const unitMembers=new Map<string,Person[]>();
+  for(const p of people){
+    if(personUnit.has(p.id))continue;
+    const spouseRel=unions.find(r=>r.from_person_id===p.id||r.to_person_id===p.id);
+    const otherId=spouseRel?(spouseRel.from_person_id===p.id?spouseRel.to_person_id:spouseRel.from_person_id):null;
+    const other=otherId?people.find(x=>x.id===otherId):undefined;
+    const members=other&&depth.get(other.id)===depth.get(p.id)?[p,other]:[p];
+    if(members.length===2){
+      const male=members.find(x=>x.gender==="male");
+      const female=members.find(x=>x.gender==="female");
+      if(male&&female)members.splice(0,members.length,male,female);
+      else if(spouseRel?.from_person_id===members[1].id)members.reverse();
+    }
+    const unitId=members.map(x=>x.id).sort()[0];
+    unitMembers.set(unitId,members);
+    for(const member of members)personUnit.set(member.id,unitId);
+  }
+  const unitDepth=new Map<string,number>();
+  for(const [unitId,members] of unitMembers)unitDepth.set(unitId,depth.get(members[0].id)??0);
+  const unitParents=new Map<string,Set<string>>();
+  for(const child of people){
+    const childUnit=personUnit.get(child.id)!;
+    for(const parentId of parents.get(child.id)??[]){
+      const parentUnit=personUnit.get(parentId);
+      if(parentUnit&&parentUnit!==childUnit){
+        const set=unitParents.get(childUnit)??new Set<string>();set.add(parentUnit);unitParents.set(childUnit,set);
+      }
+    }
   }
   const xById=new Map<string,number>();
+  const unitX=new Map<string,number>();
+  const unitWidth=(unitId:string)=>{const count=unitMembers.get(unitId)?.length??1;return count*196+(count-1)*24;};
   const maxDepth=Math.max(0,...Array.from(depth.values()));
-  const rootRow=orderedByDepth.get(0)??[];
-  rootRow.forEach((p,i)=>xById.set(p.id,i*300-(rootRow.length-1)*150));
-  for(let d=1;d<=maxDepth;d++){
-    const row=orderedByDepth.get(d)??[];
-    const families=new Map<string,Person[]>();
-    for(const child of row){
-      const ps=(parents.get(child.id)??[]).filter(id=>depth.has(id)).sort();
-      const key=ps.length?ps.join("|"):"orphan:"+child.id;
-      families.set(key,[...(families.get(key)??[]),child]);
+  for(let d=0;d<=maxDepth;d++){
+    const rowUnits=Array.from(unitMembers.keys()).filter(id=>unitDepth.get(id)===d);
+    const familyGroups=new Map<string,string[]>();
+    for(const unitId of rowUnits){
+      const ps=Array.from(unitParents.get(unitId)??[]).filter(id=>unitDepth.get(id)!==undefined).sort();
+      const key=ps.length?ps.join("|"):"root:"+unitId;
+      familyGroups.set(key,[...(familyGroups.get(key)??[]),unitId]);
     }
-    const clusters=Array.from(families.entries()).map(([key,kids])=>{
-      const pids=key.startsWith("orphan:")?[]:key.split("|");
-      const anchor=pids.length?pids.reduce((sum,id)=>sum+(xById.get(id)??0),0)/pids.length:0;
-      return {kids,anchor};
+    const clusters=Array.from(familyGroups.entries()).map(([key,units])=>{
+      const pids=key.startsWith("root:")?[]:key.split("|");
+      const anchor=pids.length?pids.reduce((sum,id)=>sum+(unitX.get(id)??0),0)/pids.length:0;
+      return {units,anchor};
     }).sort((a,b)=>a.anchor-b.anchor);
-    let rightEdge=-Infinity;
+    let cursor=-Infinity;
     for(const cluster of clusters){
-      const kids=cluster.kids;
-      const width=(kids.length-1)*260;
-      let center=cluster.anchor;
-      const left=center-width/2;
-      if(left<rightEdge+80)center+=rightEdge+80-left;
-      kids.forEach((kid,i)=>xById.set(kid.id,center-width/2+i*260));
-      rightEdge=center+width/2+196;
+      const widths=cluster.units.map(unitWidth);
+      const total=widths.reduce((sum,w)=>sum+w,0)+Math.max(0,cluster.units.length-1)*70;
+      let left=cluster.anchor-total/2;
+      if(left<cursor+70)left=cursor+70;
+      for(let i=0;i<cluster.units.length;i++){
+        const unitId=cluster.units[i],width=widths[i];
+        const center=left+width/2;
+        unitX.set(unitId,center);
+        const members=unitMembers.get(unitId)??[];
+        let memberX=left;
+        for(const member of members){xById.set(member.id,memberX);memberX+=220;}
+        left+=width+70;
+      }
+      cursor=left-70;
     }
   }
   const nodes:Node[]=people.map(p=>{const d=depth.get(p.id)??0;return {id:p.id,position:{x:xById.get(p.id)??0,y:d*300},style:{width:196,border:"none",background:"transparent",padding:0},data:{label:
