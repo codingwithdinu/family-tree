@@ -18,9 +18,11 @@ export function TreeWorkspace({ family, initialPeople, initialRelationships, rol
   const [showAdd, setShowAdd] = useState(false);
   const [addRelation, setAddRelation] = useState<"none" | "parent" | "child" | "spouse" | "partner">("none");
   const [showEdit, setShowEdit] = useState(false);
-  const [busy, setBusy] = useState(false);\n  const [photoUrls, setPhotoUrls] = useState<Record<string,string>>({});
+  const [busy, setBusy] = useState(false);
+  const [photoUrls, setPhotoUrls] = useState<Record<string,string>>({});
   const [error, setError] = useState("");
-  const canEdit = role === "owner" || role === "editor";\n  useEffect(() => { let active = true; const load = async () => { const supabase = createClient(); const entries = await Promise.all(people.filter(p=>p.avatar_path).map(async p=>{ const {data,error}=await supabase.storage.from("family-photos").createSignedUrl(p.avatar_path!,3600); return [p.id,error?"":data.signedUrl] as const; })); if(active) setPhotoUrls(Object.fromEntries(entries.filter(([,url])=>url))); }; void load(); return ()=>{active=false;}; },[people]);
+  const canEdit = role === "owner" || role === "editor";
+  useEffect(() => { let active = true; const load = async () => { const supabase = createClient(); const entries = await Promise.all(people.filter(p=>p.avatar_path).map(async p=>{ const {data,error}=await supabase.storage.from("family-photos").createSignedUrl(p.avatar_path!,3600); return [p.id,error?"":data.signedUrl] as const; })); if(active) setPhotoUrls(Object.fromEntries(entries.filter(([,url])=>url))); }; void load(); return ()=>{active=false;}; },[people]);
   const graph = useMemo(() => buildGraph(people, relationships, (personId, relation) => { const person = people.find(p => p.id === personId); if (person) { setSelected(person); setAddRelation(relation); setShowAdd(true); setError(""); } }), [people, relationships]);
   const [diagramNodes, setDiagramNodes, onNodesChange] = useNodesState(graph.nodes);
   useEffect(() => { let saved: Record<string,{x:number;y:number}> = {}; try { saved = JSON.parse(localStorage.getItem("vansh-tree-layout:"+family.id) || "{}"); } catch {} setDiagramNodes(current => { const previous = new Map(current.map(n => [n.id, n.position])); return graph.nodes.map(n => ({...n, position: saved[n.id] ?? previous.get(n.id) ?? n.position})); }); }, [graph.nodes, setDiagramNodes, family.id]);
@@ -28,7 +30,8 @@ export function TreeWorkspace({ family, initialPeople, initialRelationships, rol
 
   async function addPerson(formData: FormData) {
     setBusy(true); setError("");
-    const name = String(formData.get("display_name") ?? "").trim();\n    const photo = formData.get("photo");
+    const name = String(formData.get("display_name") ?? "").trim();
+    const photo = formData.get("photo");
     const nativeName = String(formData.get("native_name") ?? "").trim() || null;
     const gender = String(formData.get("gender") ?? "unspecified");
     const relatedPersonId = String(formData.get("related_person_id") ?? "");
@@ -85,7 +88,8 @@ export function TreeWorkspace({ family, initialPeople, initialRelationships, rol
     const native_name = String(formData.get("native_name") ?? "").trim() || null;
     const gender = String(formData.get("gender") ?? "unspecified");
     const birth_date = String(formData.get("birth_date") ?? "") || null;
-    const biography = String(formData.get("biography") ?? "").trim() || null;\n    const photo = formData.get("photo");
+    const biography = String(formData.get("biography") ?? "").trim() || null;
+    const photo = formData.get("photo");
     if (!display_name) { setError("Name is required."); setBusy(false); return; }
     try {
       const supabase = createClient();
@@ -113,7 +117,8 @@ export function TreeWorkspace({ family, initialPeople, initialRelationships, rol
       const supabase=createClient();
       const {error: relError}=await supabase.from("relationships").delete().eq("family_id",family.id).or("from_person_id.eq."+person.id+",to_person_id.eq."+person.id);
       if(relError) throw relError;
-      if(person.avatar_path) await supabase.storage.from("family-photos").remove([person.avatar_path]);\n      const {error: personError}=await supabase.from("persons").delete().eq("id",person.id).eq("family_id",family.id);
+      if(person.avatar_path) await supabase.storage.from("family-photos").remove([person.avatar_path]);
+      const {error: personError}=await supabase.from("persons").delete().eq("id",person.id).eq("family_id",family.id);
       if(personError) throw personError;
       setRelationships(old=>old.filter(r=>r.from_person_id!==person.id&&r.to_person_id!==person.id));
       setPeople(old=>old.filter(p=>p.id!==person.id));
