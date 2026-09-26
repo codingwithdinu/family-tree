@@ -174,7 +174,35 @@ function buildGraph(people: Person[], relationships: Relationship[], onAddRelati
       ordered.push(left,right);remaining.delete(first.id);remaining.delete(other.id);
     }orderedByDepth.set(d,ordered);
   }
-  const nodes:Node[]=people.map(p=>{const d=depth.get(p.id)??0;const row=orderedByDepth.get(d)??[];const i=row.findIndex(x=>x.id===p.id);return {id:p.id,position:{x:i*260-(row.length-1)*130,y:d*300},style:{width:196,border:"none",background:"transparent",padding:0},data:{label:
+  const xById=new Map<string,number>();
+  const maxDepth=Math.max(0,...Array.from(depth.values()));
+  const rootRow=orderedByDepth.get(0)??[];
+  rootRow.forEach((p,i)=>xById.set(p.id,i*300-(rootRow.length-1)*150));
+  for(let d=1;d<=maxDepth;d++){
+    const row=orderedByDepth.get(d)??[];
+    const families=new Map<string,Person[]>();
+    for(const child of row){
+      const ps=(parents.get(child.id)??[]).filter(id=>depth.has(id)).sort();
+      const key=ps.length?ps.join("|"):"orphan:"+child.id;
+      families.set(key,[...(families.get(key)??[]),child]);
+    }
+    const clusters=Array.from(families.entries()).map(([key,kids])=>{
+      const pids=key.startsWith("orphan:")?[]:key.split("|");
+      const anchor=pids.length?pids.reduce((sum,id)=>sum+(xById.get(id)??0),0)/pids.length:0;
+      return {kids,anchor};
+    }).sort((a,b)=>a.anchor-b.anchor);
+    let rightEdge=-Infinity;
+    for(const cluster of clusters){
+      const kids=cluster.kids;
+      const width=(kids.length-1)*260;
+      let center=cluster.anchor;
+      const left=center-width/2;
+      if(left<rightEdge+80)center+=rightEdge+80-left;
+      kids.forEach((kid,i)=>xById.set(kid.id,center-width/2+i*260));
+      rightEdge=center+width/2+196;
+    }
+  }
+  const nodes:Node[]=people.map(p=>{const d=depth.get(p.id)??0;return {id:p.id,position:{x:xById.get(p.id)??0,y:d*300},style:{width:196,border:"none",background:"transparent",padding:0},data:{label:
     <div className="relative w-[196px] rounded-2xl border border-[#dce4d6] bg-[#fffefa] px-3 pb-4 pt-4 text-center shadow-[0_8px_24px_rgba(35,60,42,.10)] transition hover:border-[#8fa986] hover:shadow-[0_12px_30px_rgba(35,60,42,.16)]">
       <Handle id="target-top" type="target" position={Position.Top} className="!h-2 !w-2 !border-0 !bg-[#9bad92] !opacity-100" />
       <Handle id="source-bottom" type="source" position={Position.Bottom} className="!h-2 !w-2 !border-0 !bg-[#9bad92] !opacity-100" />
