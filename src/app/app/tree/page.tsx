@@ -12,7 +12,7 @@ export default async function FamilyTreePage() {
   const family = memberships?.[0]?.families as unknown as { id: string; name: string; default_language: string } | null;
   if (!family) return <main className="min-h-screen bg-[#f8f7f2] px-6 py-16 text-[#24372d]"><div className="mx-auto max-w-xl rounded-3xl border border-[#e5e8df] bg-white p-8"><p className="text-xs font-semibold uppercase tracking-widest text-[#7a8d70]">Welcome to Vansh</p><h1 className="mt-3 text-3xl font-semibold">Start your family story</h1><p className="mt-3 text-[#6b766b]">Create your private family workspace to start adding generations. The workspace will be saved to your Supabase account.</p><CreateFamilyForm /></div></main>;
   const [{ data: people }, { data: relationships }] = await Promise.all([
-    supabase.from("persons").select("id,display_name,native_name,gender,birth_date,biography").eq("family_id", family.id).order("created_at"),
+    supabase.from("persons").select("id,display_name,native_name,gender,birth_date,biography,avatar_path").eq("family_id", family.id).order("created_at"),
     supabase.from("relationships").select("id,from_person_id,to_person_id,relationship_type,parent_role").eq("family_id", family.id),
   ]);
   return <TreeWorkspace family={family} initialPeople={people ?? []} initialRelationships={relationships ?? []} role={(memberships?.[0]?.role as string) ?? "viewer"} />;
