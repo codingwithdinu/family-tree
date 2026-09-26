@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Background, Controls, Handle, MiniMap, Position, ReactFlow, useNodesState, type Edge, type Node, type NodeProps } from "@xyflow/react";
+import { Background, Controls, MiniMap, ReactFlow, useNodesState, type Edge, type Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { createClient } from "@/lib/supabase/client";
 
@@ -10,13 +10,6 @@ type Person = { id: string; display_name: string; native_name: string | null; ge
 type Relationship = { id: string; from_person_id: string; to_person_id: string; relationship_type: string; parent_role: string | null };
 type Family = { id: string; name: string; default_language: string };
 
-function FamilyJunctionNode(_props: NodeProps) {
-  return <div className="relative h-2 w-2 rounded-full bg-[#9bad92]">
-    <Handle id="in" type="target" position={Position.Top} className="!h-2 !w-2 !border-0 !bg-[#9bad92] !opacity-100" />
-    <Handle id="out" type="source" position={Position.Bottom} className="!h-2 !w-2 !border-0 !bg-[#9bad92] !opacity-100" />
-  </div>;
-}
-const familyNodeTypes = { familyJunction: FamilyJunctionNode };
 
 export function TreeWorkspace({ family, initialPeople, initialRelationships, role }: { family: Family; initialPeople: Person[]; initialRelationships: Relationship[]; role: string }) {
   const [people, setPeople] = useState(initialPeople);
@@ -131,7 +124,7 @@ export function TreeWorkspace({ family, initialPeople, initialRelationships, rol
     <div className="grid min-h-[calc(100vh-73px)] lg:grid-cols-[1fr_310px]">
       <section className="relative min-h-[70vh] border-b border-[#e7e9e0] lg:border-b-0 lg:border-r">
         <div className="absolute left-5 top-5 z-10 flex items-center gap-3 rounded-2xl border border-[#e6e9e0] bg-white/95 px-4 py-3 shadow-sm"><div><p className="text-xs text-[#879184]">Family members</p><p className="text-xl font-semibold">{people.length}</p></div>{canEdit&&<button type="button" onClick={resetDiagramLayout} title="Restore automatic generation layout" className="rounded-xl border border-[#dce2d7] bg-[#f8f9f5] px-3 py-2 text-xs font-semibold text-[#456342] hover:bg-[#edf2e8]">Auto arrange</button>}</div>
-        {people.length === 0 ? <div className="absolute inset-0 grid place-items-center p-6"><div className="max-w-sm text-center"><div className="mx-auto grid h-16 w-16 place-items-center rounded-3xl bg-[#e9efe3] text-3xl text-[#54734f]">♧</div><h2 className="mt-5 text-2xl font-semibold">Your family story starts here</h2><p className="mt-3 text-sm leading-6 text-[#768073]">Add yourself or a family member. Then connect parents, spouses and children to grow your tree.</p>{canEdit && <button onClick={() => setShowAdd(true)} className="mt-6 rounded-full bg-[#244b38] px-6 py-3 text-sm font-semibold text-white">Add your first member</button>}</div></div> : <ReactFlow nodeTypes={familyNodeTypes} nodes={diagramNodes} edges={graph.edges} onNodesChange={onNodesChange} onNodeDragStop={(_, node) => { const saved:Record<string,{x:number;y:number}>={}; diagramNodes.forEach(n=>{saved[n.id]=n.id===node.id?node.position:n.position;}); localStorage.setItem("vansh-tree-layout:"+family.id,JSON.stringify(saved)); }} fitView fitViewOptions={{padding:.22}} minZoom={0.08} maxZoom={2} nodesDraggable={canEdit} onNodeClick={(_, node) => setSelected(people.find(p => p.id === node.id) ?? null)} nodesConnectable={false} elementsSelectable proOptions={{hideAttribution:true}} defaultEdgeOptions={{type:"smoothstep",animated:false}}><Background color="#dfe4da" gap={22}/><Controls/><MiniMap pannable zoomable nodeColor="#b9cdb0"/></ReactFlow>}
+        {people.length === 0 ? <div className="absolute inset-0 grid place-items-center p-6"><div className="max-w-sm text-center"><div className="mx-auto grid h-16 w-16 place-items-center rounded-3xl bg-[#e9efe3] text-3xl text-[#54734f]">♧</div><h2 className="mt-5 text-2xl font-semibold">Your family story starts here</h2><p className="mt-3 text-sm leading-6 text-[#768073]">Add yourself or a family member. Then connect parents, spouses and children to grow your tree.</p>{canEdit && <button onClick={() => setShowAdd(true)} className="mt-6 rounded-full bg-[#244b38] px-6 py-3 text-sm font-semibold text-white">Add your first member</button>}</div></div> : <ReactFlow nodes={diagramNodes} edges={graph.edges} onNodesChange={onNodesChange} onNodeDragStop={(_, node) => { const saved:Record<string,{x:number;y:number}>={}; diagramNodes.forEach(n=>{saved[n.id]=n.id===node.id?node.position:n.position;}); localStorage.setItem("vansh-tree-layout:"+family.id,JSON.stringify(saved)); }} fitView fitViewOptions={{padding:.22}} minZoom={0.08} maxZoom={2} nodesDraggable={canEdit} onNodeClick={(_, node) => setSelected(people.find(p => p.id === node.id) ?? null)} nodesConnectable={false} elementsSelectable proOptions={{hideAttribution:true}} defaultEdgeOptions={{type:"smoothstep",animated:false}}><Background color="#dfe4da" gap={22}/><Controls/><MiniMap pannable zoomable nodeColor="#b9cdb0"/></ReactFlow>}
       </section>
       <aside className="bg-[#fffefa] p-5 sm:p-7"><p className="text-xs font-semibold uppercase tracking-[.16em] text-[#8b9685]">Family workspace</p><h2 className="mt-2 text-xl font-semibold">Your people</h2><p className="mt-2 text-sm leading-6 text-[#788174]">Select a member in the tree to see their profile. Your data is stored in your private workspace.</p><div className="mt-6 space-y-2">{people.map(p=><button key={p.id} onClick={()=>setSelected(p)} className="flex w-full items-center gap-3 rounded-2xl border border-[#edf0e8] p-3 text-left hover:bg-[#f8f9f5]"><span className="grid h-10 w-10 place-items-center rounded-full bg-[#f1e9db] font-serif text-lg text-[#876d4e]">{(p.native_name||p.display_name).slice(0,1)}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{p.native_name||p.display_name}</span><span className="block text-xs text-[#92998e]">{p.gender && p.gender!=="unspecified" ? p.gender : "Family member"}</span></span></button>)}</div>
         {selected && <div className="mt-6 rounded-2xl border border-[#e5e9df] bg-[#f4f5ef] p-4"><div className="flex items-start justify-between gap-2"><div><p className="text-xs text-[#879184]">Selected profile</p><h3 className="mt-1 text-lg font-semibold">{selected.display_name}</h3>{selected.native_name && <p className="text-sm text-[#6e796b]">{selected.native_name}</p>}</div>{canEdit&&<button type="button" onClick={()=>{setError("");setShowEdit(true);}} className="rounded-xl border border-[#dce2d7] bg-white px-3 py-2 text-xs font-semibold text-[#315b3c] hover:bg-[#edf2e8]">Edit</button>}</div>{selected.gender&&selected.gender!=="unspecified"&&<p className="mt-2 text-sm capitalize text-[#6e796b]">{selected.gender}</p>}{selected.birth_date && <p className="mt-2 text-sm text-[#6e796b]">Born {selected.birth_date}</p>}{selected.biography && <p className="mt-3 text-sm leading-6 text-[#6e796b]">{selected.biography}</p>}
@@ -181,25 +174,17 @@ function buildGraph(people: Person[], relationships: Relationship[], onAddRelati
       <button type="button" aria-label={`Add child of ${p.display_name}`} title="Add child" onClick={e=>{e.stopPropagation();onAddRelative(p.id,"child");}} className="nodrag nopan absolute -bottom-3 left-1/2 z-10 grid h-7 w-7 -translate-x-1/2 place-items-center rounded-full border-2 border-white bg-[#e67e22] text-lg leading-none text-white shadow-md transition hover:scale-110">+</button>
       <button type="button" aria-label={`Add spouse or partner of ${p.display_name}`} title="Add spouse / partner" onClick={e=>{e.stopPropagation();onAddRelative(p.id,"spouse");}} className="nodrag nopan absolute -right-3 top-1/2 z-10 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full border-2 border-white bg-[#e67e22] text-lg leading-none text-white shadow-md transition hover:scale-110">+</button>
     </div>},type:"default"};});
-  const parentLinks=relationships.filter(r=>r.relationship_type==="parent_child"&&valid.has(r.from_person_id)&&valid.has(r.to_person_id));
-  const parentsByChild=new Map<string,string[]>();
-  for(const r of parentLinks)parentsByChild.set(r.to_person_id,[...(parentsByChild.get(r.to_person_id)??[]),r.from_person_id]);
-  const junctionEdges:Edge[]=[];
-  const pairedChildIds=new Set<string>();
-  for(const [childId,parentIds] of parentsByChild){
-    const uniqueParents=[...new Set(parentIds)];
-    if(uniqueParents.length<2)continue;
-    const parentA=nodes.find(n=>n.id===uniqueParents[0]);const parentB=nodes.find(n=>n.id===uniqueParents[1]);const child=nodes.find(n=>n.id===childId);
-    if(!parentA||!parentB||!child)continue;
-    const junctionId=`family-junction-${childId}`;pairedChildIds.add(childId);
-    nodes.push({id:junctionId,position:{x:(parentA.position.x+parentB.position.x)/2+98,y:child.position.y-78},data:{},style:{width:8,height:8,padding:0,border:0,background:"transparent"},draggable:false,selectable:false,connectable:true,focusable:false,type:"familyJunction"});
-    junctionEdges.push({id:`parent-${uniqueParents[0]}-${junctionId}`,source:uniqueParents[0],target:junctionId,type:"smoothstep",targetHandle:"in",style:{stroke:"#9bad92",strokeWidth:2}});
-    junctionEdges.push({id:`parent-${uniqueParents[1]}-${junctionId}`,source:uniqueParents[1],target:junctionId,type:"smoothstep",sourceHandle:"bottom",targetHandle:null,style:{stroke:"#9bad92",strokeWidth:1.8}});
-    junctionEdges.push({id:`${junctionId}-child-${childId}`,source:junctionId,target:childId,type:"smoothstep",sourceHandle:"out",style:{stroke:"#9bad92",strokeWidth:2}});
-  }
-  const edges:Edge[]=[
-    ...relationships.filter(r=>valid.has(r.from_person_id)&&valid.has(r.to_person_id)&&!(r.relationship_type==="parent_child"&&pairedChildIds.has(r.to_person_id))).map(r=>({id:r.id,source:r.from_person_id,target:r.to_person_id,type:r.relationship_type==="spouse"||r.relationship_type==="partner"?"straight" as const:"smoothstep" as const,sourceHandle:r.relationship_type==="parent_child"?"bottom":undefined,targetHandle:r.relationship_type==="parent_child"?"top":undefined,label:r.relationship_type==="spouse"?"Spouse":r.relationship_type==="partner"?"Partner":undefined,labelStyle:{fill:"#71816c",fontSize:10,fontWeight:600},labelBgStyle:{fill:"#fffefa",fillOpacity:.95},style:{stroke:r.relationship_type==="spouse"||r.relationship_type==="partner"?"#d28b43":"#9bad92",strokeWidth:r.relationship_type==="spouse"||r.relationship_type==="partner"?2:1.8}})),
-    ...junctionEdges
-  ];
+  const edges:Edge[]=relationships.filter(r=>valid.has(r.from_person_id)&&valid.has(r.to_person_id)).map(r=>({
+    id:r.id,
+    source:r.from_person_id,
+    target:r.to_person_id,
+    type:r.relationship_type==="spouse"||r.relationship_type==="partner"?"straight" as const:"smoothstep" as const,
+    sourceHandle:r.relationship_type==="parent_child"?"bottom":undefined,
+    targetHandle:r.relationship_type==="parent_child"?"top":undefined,
+    label:r.relationship_type==="spouse"?"Spouse":r.relationship_type==="partner"?"Partner":undefined,
+    labelStyle:{fill:"#71816c",fontSize:10,fontWeight:600},
+    labelBgStyle:{fill:"#fffefa",fillOpacity:.95},
+    style:{stroke:r.relationship_type==="spouse"||r.relationship_type==="partner"?"#d28b43":"#9bad92",strokeWidth:r.relationship_type==="spouse"||r.relationship_type==="partner"?2:2.2}
+  }));
   return {nodes,edges};
 }
