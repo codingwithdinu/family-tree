@@ -300,17 +300,35 @@ function buildGraph(people: Person[], relationships: Relationship[], photoUrls: 
       <button type="button" aria-label={`Add child of ${p.display_name}`} title="Add child" onClick={e=>{e.stopPropagation();onAddRelative(p.id,"child");}} className="nodrag nopan absolute -bottom-3 left-1/2 z-10 grid h-7 w-7 -translate-x-1/2 place-items-center rounded-full border-2 border-white bg-[#e67e22] text-lg leading-none text-white shadow-md transition hover:scale-110">+</button>
       <button type="button" aria-label={`Add spouse or partner of ${p.display_name}`} title="Add spouse / partner" onClick={e=>{e.stopPropagation();onAddRelative(p.id,"spouse");}} className="nodrag nopan absolute -right-3 top-1/2 z-10 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full border-2 border-white bg-[#e67e22] text-lg leading-none text-white shadow-md transition hover:scale-110">+</button>
     </div>},type:"default"};});
-  const edges:Edge[]=relationships.filter(r=>valid.has(r.from_person_id)&&valid.has(r.to_person_id)).map(r=>({
+  const rawEdges=relationships.filter(r=>valid.has(r.from_person_id)&&valid.has(r.to_person_id));
+  const parentEdges=rawEdges.filter(r=>["parent_child","parent-child","parentchild"].includes(r.relationship_type.toLowerCase().replace(/\\s+/g,"")));
+  // For each child, draw one connector from each distinct parent-couple unit.
+  // Drawing both mother->child and father->child creates stacked/crossing
+  // smoothstep paths that look like thick overlapping bands. Prefer father
+  // as the visible connector anchor when available; both parent records remain
+  // intact in the database and are still used for generation/layout.
+  const chosenParentEdges=new Map<string,Relationship>();
+  for(const r of parentEdges){
+    const childUnit=personUnit.get(r.to_person_id)??r.to_person_id;
+    const parentUnit=personUnit.get(r.from_person_id)??r.from_person_id;
+    const key=childUnit+"::"+parentUnit;
+    const old=chosenParentEdges.get(key);
+    const candidate=people.find(p=>p.id===r.from_person_id);
+    const previous=old?people.find(p=>p.id===old.from_person_id):undefined;
+    if(!old||(candidate?.gender==="male"&&previous?.gender!=="male"))chosenParentEdges.set(key,r);
+  }
+  const visibleEdges=[...chosenParentEdges.values(),...rawEdges.filter(r=>!["parent_child","parent-child","parentchild"].includes(r.relationship_type.toLowerCase().replace(/\\s+/g,"")))];
+  const edges:Edge[]=visibleEdges.map(r=>({
     id:r.id,
     source:r.from_person_id,
     target:r.to_person_id,
-    type:r.relationship_type==="spouse"||r.relationship_type==="partner"?"straight" as const:"smoothstep" as const,
-    sourceHandle:r.relationship_type==="parent_child"?"source-bottom":r.relationship_type==="spouse"||r.relationship_type==="partner"?"source-right":undefined,
-    targetHandle:r.relationship_type==="parent_child"?"target-top":r.relationship_type==="spouse"||r.relationship_type==="partner"?"target-left":undefined,
+    type:["spouse","partner","marriage"].includes(r.relationship_type.toLowerCase())?"straight" as const:"smoothstep" as const,
+    sourceHandle:["spouse","partner","marriage"].includes(r.relationship_type.toLowerCase())?"source-right":"source-bottom",
+    targetHandle:["spouse","partner","marriage"].includes(r.relationship_type.toLowerCase())?"target-left":"target-top",
     label:r.relationship_type==="spouse"?"Spouse":r.relationship_type==="partner"?"Partner":undefined,
     labelStyle:{fill:"#71816c",fontSize:10,fontWeight:600},
     labelBgStyle:{fill:"#fffefa",fillOpacity:.95},
-    style:{stroke:r.relationship_type==="spouse"||r.relationship_type==="partner"?"#d28b43":"#9bad92",strokeWidth:r.relationship_type==="spouse"||r.relationship_type==="partner"?2:2.2}
+    style:{stroke:["spouse","partner","marriage"].includes(r.relationship_type.toLowerCase())?"#d28b43":"#9bad92",strokeWidth:2.2}
   }));
   return {nodes,edges};
 }
