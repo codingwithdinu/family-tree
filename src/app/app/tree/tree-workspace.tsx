@@ -185,34 +185,36 @@ function buildGraph(people: Person[], relationships: Relationship[], photoUrls: 
   const valid = new Set(people.map(p=>p.id));
   const parents = new Map<string,string[]>(); const children = new Map<string,string[]>();
   for(const r of relationships.filter(r=>["parent_child","parent-child","parentchild"].includes(r.relationship_type.toLowerCase().replace(/\s+/g,""))&&valid.has(r.from_person_id)&&valid.has(r.to_person_id))){parents.set(r.to_person_id,[...(parents.get(r.to_person_id)??[]),r.from_person_id]);children.set(r.from_person_id,[...(children.get(r.from_person_id)??[]),r.to_person_id]);}
-  const depth=new Map<string,number>();
-  const roots=people.filter(p=>(parents.get(p.id)??[]).length===0);
-  for(const p of people) depth.set(p.id, roots.some(root=>root.id===p.id)?0:-1);
-  // Assign each descendant to the next generation below its deepest known parent.
-  // Repeated relaxation handles parents entered in any order and multi-parent families.
-  for(let pass=0;pass<people.length;pass++){
+  const unions=relationships.filter(r=>["spouse","partner","marriage"].includes(r.relationship_type.toLowerCase())&&valid.has(r.from_person_id)&&valid.has(r.to_person_id));
+  // Treat each spouse/partner pair as one layout unit. This prevents a spouse
+  // from being assigned to an earlier generation simply because they have no
+  // parent links of their own.
+  const representative=new Map<string,string>(people.map(p=>[p.id,p.id]));
+  const find=(id:string):string=>{const parent=representative.get(id)??id;if(parent===id)return id;const root=find(parent);representative.set(id,root);return root;};
+  const unite=(a:string,b:string)=>{const ra=find(a),rb=find(b);if(ra!==rb)representative.set(rb,ra);};
+  for(const r of unions)unite(r.from_person_id,r.to_person_id);
+  const componentMembers=new Map<string,string[]>();
+  for(const p of people){const root=find(p.id);componentMembers.set(root,[...(componentMembers.get(root)??[]),p.id]);}
+  const componentParents=new Map<string,Set<string>>();
+  for(const r of relationships.filter(r=>["parent_child","parent-child","parentchild"].includes(r.relationship_type.toLowerCase().replace(/\\s+/g,""))&&valid.has(r.from_person_id)&&valid.has(r.to_person_id))){
+    const parentGroup=find(r.from_person_id),childGroup=find(r.to_person_id);
+    if(parentGroup!==childGroup){const set=componentParents.get(childGroup)??new Set<string>();set.add(parentGroup);componentParents.set(childGroup,set);}
+  }
+  const componentDepth=new Map<string,number>();
+  for(const group of componentMembers.keys())componentDepth.set(group,(componentParents.get(group)?.size??0)===0?0:-1);
+  // Calculate generation depth at the spouse-unit level, not person level.
+  for(let pass=0;pass<componentMembers.size;pass++){
     let changed=false;
-    for(const p of people){
-      const ps=parents.get(p.id)??[];
-      const known=ps.map(id=>depth.get(id)??-1).filter(d=>d>=0);
-      if(known.length){const next=Math.max(...known)+1;if(next>(depth.get(p.id)??-1)){depth.set(p.id,next);changed=true;}}
+    for(const group of componentMembers.keys()){
+      const ps=Array.from(componentParents.get(group)??[]);
+      const known=ps.map(id=>componentDepth.get(id)??-1).filter(d=>d>=0);
+      if(known.length){const next=Math.max(...known)+1;if(next>(componentDepth.get(group)??-1)){componentDepth.set(group,next);changed=true;}}
     }
     if(!changed)break;
   }
-  for(const p of people)if((depth.get(p.id)??-1)<0)depth.set(p.id,0);
-  const unions=relationships.filter(r=>["spouse","partner","marriage"].includes(r.relationship_type.toLowerCase())&&valid.has(r.from_person_id)&&valid.has(r.to_person_id));
-  // Spouses/partners belong on the same generation row.
-  for(let pass=0;pass<people.length;pass++){
-    let changed=false;
-    for(const r of unions){const d=Math.min(depth.get(r.from_person_id)??0,depth.get(r.to_person_id)??0);if(depth.get(r.from_person_id)!==d||depth.get(r.to_person_id)!==d){depth.set(r.from_person_id,d);depth.set(r.to_person_id,d);changed=true;}}
-    if(!changed)break;
-  }
-  // Re-propagate generations after aligning spouses, so their children remain below them.
-  for(let pass=0;pass<people.length;pass++){
-    let changed=false;
-    for(const p of people){const ps=parents.get(p.id)??[];const known=ps.map(id=>depth.get(id)??-1).filter(d=>d>=0);if(known.length){const next=Math.max(...known)+1;if(next>(depth.get(p.id)??0)){depth.set(p.id,next);changed=true;}}}
-    if(!changed)break;
-  }
+  for(const group of componentMembers.keys())if((componentDepth.get(group)??-1)<0)componentDepth.set(group,0);
+  const depth=new Map<string,number>();
+  for(const p of people)depth.set(p.id,componentDepth.get(find(p.id))??0);
   const groups=new Map<number,Person[]>();for(const p of people){const d=depth.get(p.id)??0;groups.set(d,[...(groups.get(d)??[]),p]);}
   const orderedByDepth=new Map<number,Person[]>();
   for(const [d,row] of groups){const remaining=new Map(row.map(p=>[p.id,p]));const ordered:Person[]=[];
