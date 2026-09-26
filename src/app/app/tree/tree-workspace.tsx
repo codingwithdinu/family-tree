@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Background, Controls, MiniMap, ReactFlow, useNodesState, type Edge, type Node } from "@xyflow/react";
+import { Background, Controls, Handle, MiniMap, Position, ReactFlow, useNodesState, type Edge, type Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { createClient } from "@/lib/supabase/client";
 
@@ -176,6 +176,10 @@ function buildGraph(people: Person[], relationships: Relationship[], onAddRelati
   }
   const nodes:Node[]=people.map(p=>{const d=depth.get(p.id)??0;const row=orderedByDepth.get(d)??[];const i=row.findIndex(x=>x.id===p.id);return {id:p.id,position:{x:i*260-(row.length-1)*130,y:d*300},style:{width:196,border:"none",background:"transparent",padding:0},data:{label:
     <div className="relative w-[196px] rounded-2xl border border-[#dce4d6] bg-[#fffefa] px-3 pb-4 pt-4 text-center shadow-[0_8px_24px_rgba(35,60,42,.10)] transition hover:border-[#8fa986] hover:shadow-[0_12px_30px_rgba(35,60,42,.16)]">
+      <Handle id="target-top" type="target" position={Position.Top} className="!h-2 !w-2 !border-0 !bg-[#9bad92] !opacity-100" />
+      <Handle id="source-bottom" type="source" position={Position.Bottom} className="!h-2 !w-2 !border-0 !bg-[#9bad92] !opacity-100" />
+      <Handle id="target-left" type="target" position={Position.Left} className="!h-2 !w-2 !border-0 !bg-[#d28b43] !opacity-100" />
+      <Handle id="source-right" type="source" position={Position.Right} className="!h-2 !w-2 !border-0 !bg-[#d28b43] !opacity-100" />
       <button type="button" aria-label={`Add parent of ${p.display_name}`} title="Add parent" onClick={e=>{e.stopPropagation();onAddRelative(p.id,"parent");}} className="nodrag nopan absolute -top-3 left-1/2 z-10 grid h-7 w-7 -translate-x-1/2 place-items-center rounded-full border-2 border-white bg-[#e67e22] text-lg font-medium leading-none text-white shadow-md transition hover:scale-110">+</button>
       <button type="button" aria-label={`Add parent of ${p.display_name}`} title="Add parent" onClick={e=>{e.stopPropagation();onAddRelative(p.id,"parent");}} className="nodrag nopan absolute -left-3 top-1/2 z-10 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full border-2 border-white bg-[#e67e22] text-lg leading-none text-white shadow-md transition hover:scale-110">+</button>
       <div className="mx-auto mb-2 grid h-14 w-14 place-items-center rounded-full bg-gradient-to-br from-[#f4e6cc] to-[#d8e6d1] font-serif text-2xl text-[#54734f]">{(p.native_name||p.display_name).slice(0,1)}</div>
@@ -190,8 +194,8 @@ function buildGraph(people: Person[], relationships: Relationship[], onAddRelati
     source:r.from_person_id,
     target:r.to_person_id,
     type:r.relationship_type==="spouse"||r.relationship_type==="partner"?"straight" as const:"smoothstep" as const,
-    sourceHandle:r.relationship_type==="parent_child"?"bottom":undefined,
-    targetHandle:r.relationship_type==="parent_child"?"top":undefined,
+    sourceHandle:r.relationship_type==="parent_child"?"source-bottom":r.relationship_type==="spouse"||r.relationship_type==="partner"?"source-right":undefined,
+    targetHandle:r.relationship_type==="parent_child"?"target-top":r.relationship_type==="spouse"||r.relationship_type==="partner"?"target-left":undefined,
     label:r.relationship_type==="spouse"?"Spouse":r.relationship_type==="partner"?"Partner":undefined,
     labelStyle:{fill:"#71816c",fontSize:10,fontWeight:600},
     labelBgStyle:{fill:"#fffefa",fillOpacity:.95},
