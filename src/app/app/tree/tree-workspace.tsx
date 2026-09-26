@@ -15,6 +15,7 @@ export function TreeWorkspace({ family, initialPeople, initialRelationships, rol
   const [relationships, setRelationships] = useState(initialRelationships);
   const [selected, setSelected] = useState<Person | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const canEdit = role === "owner" || role === "editor";
@@ -61,6 +62,55 @@ export function TreeWorkspace({ family, initialPeople, initialRelationships, rol
     finally { setBusy(false); }
   }
 
+
+  async function updatePerson(formData: FormData) {
+    if (!selected || !canEdit) return;
+    setBusy(true); setError("");
+    const display_name = String(formData.get("display_name") ?? "").trim();
+    const native_name = String(formData.get("native_name") ?? "").trim() || null;
+    const gender = String(formData.get("gender") ?? "unspecified");
+    const birth_date = String(formData.get("birth_date") ?? "") || null;
+    const biography = String(formData.get("biography") ?? "").trim() || null;
+    if (!display_name) { setError("Name is required."); setBusy(false); return; }
+    try {
+      const supabase = createClient();
+      const { data, error: updateError } = await supabase.from("persons").update({display_name,native_name,gender,birth_date,biography}).eq("id",selected.id).eq("family_id",family.id).select("id,display_name,native_name,gender,birth_date,biography").single();
+      if (updateError) throw updateError;
+      setPeople(old=>old.map(p=>p.id===data.id?data:p)); setSelected(data); setShowEdit(false);
+    } catch(e) { setError(e instanceof Error?e.message:"Could not update this member."); }
+    finally { setBusy(false); }
+  }
+
+  async function deletePerson(person: Person) {
+    if (!canEdit) return;
+    if (!window.confirm("Delete " + person.display_name + " from your family tree? Their relationship connections will also be removed. This cannot be undone.")) return;
+    setBusy(true); setError("");
+    try {
+      const supabase=createClient();
+      const {error: relError}=await supabase.from("relationships").delete().eq("family_id",family.id).or("from_person_id.eq."+person.id+",to_person_id.eq."+person.id);
+      if(relError) throw relError;
+      const {error: personError}=await supabase.from("persons").delete().eq("id",person.id).eq("family_id",family.id);
+      if(personError) throw personError;
+      setRelationships(old=>old.filter(r=>r.from_person_id!==person.id&&r.to_person_id!==person.id));
+      setPeople(old=>old.filter(p=>p.id!==person.id));
+      if(selected?.id===person.id){setSelected(null);setShowEdit(false);}
+    } catch(e) {setError(e instanceof Error?e.message:"Could not delete this member.");}
+    finally {setBusy(false);}
+  }
+
+  async function deleteRelationship(rel: Relationship) {
+    if(!canEdit) return;
+    if(!window.confirm("Remove this relationship connection? The family members themselves will remain.")) return;
+    setBusy(true);setError("");
+    try {
+      const supabase=createClient();
+      const {error: relError}=await supabase.from("relationships").delete().eq("id",rel.id).eq("family_id",family.id);
+      if(relError)throw relError;
+      setRelationships(old=>old.filter(r=>r.id!==rel.id));
+    }catch(e){setError(e instanceof Error?e.message:"Could not remove relationship.");}
+    finally{setBusy(false);}
+  }
+
   return <main className="min-h-screen bg-[#f8f7f2] text-[#24372d]">
     <header className="flex flex-wrap items-center justify-between gap-4 border-b border-[#e7e9e0] bg-[#fffefa] px-5 py-4 sm:px-8">
       <div className="flex items-center gap-3"><Link href="/" className="grid h-10 w-10 place-items-center rounded-2xl bg-[#244b38] font-semibold text-white">V</Link><div><p className="text-xs text-[#879184]">Your private family</p><h1 className="font-semibold">{family.name}</h1></div><span className="rounded-full bg-[#edf2e8] px-3 py-1 text-xs text-[#52714f]">Private</span></div>
@@ -72,9 +122,18 @@ export function TreeWorkspace({ family, initialPeople, initialRelationships, rol
         {people.length === 0 ? <div className="absolute inset-0 grid place-items-center p-6"><div className="max-w-sm text-center"><div className="mx-auto grid h-16 w-16 place-items-center rounded-3xl bg-[#e9efe3] text-3xl text-[#54734f]">♧</div><h2 className="mt-5 text-2xl font-semibold">Your family story starts here</h2><p className="mt-3 text-sm leading-6 text-[#768073]">Add yourself or a family member. Then connect parents, spouses and children to grow your tree.</p>{canEdit && <button onClick={() => setShowAdd(true)} className="mt-6 rounded-full bg-[#244b38] px-6 py-3 text-sm font-semibold text-white">Add your first member</button>}</div></div> : <ReactFlow nodes={graph.nodes} edges={graph.edges} fitView fitViewOptions={{padding:.2}} onNodeClick={(_, node) => setSelected(people.find(p => p.id === node.id) ?? null)} nodesConnectable={false} elementsSelectable proOptions={{hideAttribution:true}}><Background color="#dfe4da" gap={22}/><Controls/><MiniMap pannable zoomable nodeColor="#b9cdb0"/></ReactFlow>}
       </section>
       <aside className="bg-[#fffefa] p-5 sm:p-7"><p className="text-xs font-semibold uppercase tracking-[.16em] text-[#8b9685]">Family workspace</p><h2 className="mt-2 text-xl font-semibold">Your people</h2><p className="mt-2 text-sm leading-6 text-[#788174]">Select a member in the tree to see their profile. Your data is stored in your private workspace.</p><div className="mt-6 space-y-2">{people.map(p=><button key={p.id} onClick={()=>setSelected(p)} className="flex w-full items-center gap-3 rounded-2xl border border-[#edf0e8] p-3 text-left hover:bg-[#f8f9f5]"><span className="grid h-10 w-10 place-items-center rounded-full bg-[#f1e9db] font-serif text-lg text-[#876d4e]">{(p.native_name||p.display_name).slice(0,1)}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{p.native_name||p.display_name}</span><span className="block text-xs text-[#92998e]">{p.gender && p.gender!=="unspecified" ? p.gender : "Family member"}</span></span></button>)}</div>
-        {selected && <div className="mt-6 rounded-2xl bg-[#f4f5ef] p-4"><p className="text-xs text-[#879184]">Selected profile</p><h3 className="mt-1 text-lg font-semibold">{selected.display_name}</h3>{selected.native_name && <p className="text-sm text-[#6e796b]">{selected.native_name}</p>}{selected.birth_date && <p className="mt-2 text-sm text-[#6e796b]">Born {selected.birth_date}</p>}{selected.biography && <p className="mt-3 text-sm leading-6 text-[#6e796b]">{selected.biography}</p>}<button onClick={()=>setSelected(null)} className="mt-3 text-xs text-[#54734f] underline">Close profile</button></div>}
+        {selected && <div className="mt-6 rounded-2xl border border-[#e5e9df] bg-[#f4f5ef] p-4"><div className="flex items-start justify-between gap-2"><div><p className="text-xs text-[#879184]">Selected profile</p><h3 className="mt-1 text-lg font-semibold">{selected.display_name}</h3>{selected.native_name && <p className="text-sm text-[#6e796b]">{selected.native_name}</p>}</div>{canEdit&&<button type="button" onClick={()=>{setError("");setShowEdit(true);}} className="rounded-xl border border-[#dce2d7] bg-white px-3 py-2 text-xs font-semibold text-[#315b3c] hover:bg-[#edf2e8]">Edit</button>}</div>{selected.gender&&selected.gender!=="unspecified"&&<p className="mt-2 text-sm capitalize text-[#6e796b]">{selected.gender}</p>}{selected.birth_date && <p className="mt-2 text-sm text-[#6e796b]">Born {selected.birth_date}</p>}{selected.biography && <p className="mt-3 text-sm leading-6 text-[#6e796b]">{selected.biography}</p>}
+<p className="mt-4 text-xs font-semibold uppercase tracking-wider text-[#899386]">Connections</p><div className="mt-2 space-y-2">{relationships.filter(r=>r.from_person_id===selected.id||r.to_person_id===selected.id).map(r=>{const otherId=r.from_person_id===selected.id?r.to_person_id:r.from_person_id;const other=people.find(p=>p.id===otherId);const label=r.relationship_type==="spouse"?"Spouse":r.relationship_type==="partner"?"Partner":r.from_person_id===selected.id?"Parent of":"Child of";return <div key={r.id} className="flex items-center gap-2 rounded-xl border border-[#e4e8de] bg-white px-3 py-2"><span className="min-w-0 flex-1 text-xs text-[#566653]">{label}: <b>{other?.native_name||other?.display_name||"Family member"}</b></span>{canEdit&&<button type="button" disabled={busy} onClick={()=>deleteRelationship(r)} aria-label="Remove relationship" title="Remove connection" className="rounded-lg px-2 py-1 text-sm text-[#a34b45] hover:bg-red-50">×</button>}</div>})}{relationships.filter(r=>r.from_person_id===selected.id||r.to_person_id===selected.id).length===0&&<p className="text-xs text-[#92998e]">No connections yet.</p>}</div>
+{error&&<p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-xs text-red-700">{error}</p>}{canEdit&&<button type="button" disabled={busy} onClick={()=>deletePerson(selected)} className="mt-4 w-full rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-50">{busy?"Working…":"Delete family member"}</button>}<button onClick={()=>setSelected(null)} className="mt-3 text-xs text-[#54734f] underline">Close profile</button></div>}
       </aside>
     </div>
+    {showEdit && selected && <div className="fixed inset-0 z-[60] grid place-items-center bg-[#18251d]/50 p-4" role="dialog" aria-modal="true" aria-labelledby="edit-member-title"><form action={updatePerson} className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-[#fffefa] p-6 shadow-2xl sm:p-8"><div className="flex items-start justify-between"><div><p className="text-xs font-semibold uppercase tracking-widest text-[#879184]">Update family details</p><h2 id="edit-member-title" className="mt-2 text-2xl font-semibold">Edit member</h2></div><button type="button" onClick={()=>{setShowEdit(false);setError("");}} aria-label="Close edit form" className="rounded-full border px-3 py-1.5">×</button></div>
+<label className="mt-6 block text-sm font-medium">Full name *<input name="display_name" required maxLength={160} defaultValue={selected.display_name} className="mt-2 w-full rounded-xl border border-[#dfe4da] bg-white px-4 py-3 outline-none focus:border-[#78916c]"/></label>
+<label className="mt-4 block text-sm font-medium">Name in Hindi / native script<input name="native_name" maxLength={160} defaultValue={selected.native_name??""} placeholder="नाम (वैकल्पिक)" className="mt-2 w-full rounded-xl border border-[#dfe4da] bg-white px-4 py-3 outline-none focus:border-[#78916c]"/></label>
+<label className="mt-4 block text-sm font-medium">Gender<select name="gender" defaultValue={selected.gender??"unspecified"} className="mt-2 w-full rounded-xl border border-[#dfe4da] bg-white px-4 py-3"><option value="unspecified">Prefer not to specify</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select></label>
+<label className="mt-4 block text-sm font-medium">Date of birth<input name="birth_date" type="date" defaultValue={selected.birth_date??""} className="mt-2 w-full rounded-xl border border-[#dfe4da] bg-white px-4 py-3 outline-none focus:border-[#78916c]"/></label>
+<label className="mt-4 block text-sm font-medium">Biography / notes<textarea name="biography" rows={4} maxLength={3000} defaultValue={selected.biography??""} placeholder="A little about this family member…" className="mt-2 w-full rounded-xl border border-[#dfe4da] bg-white px-4 py-3 outline-none focus:border-[#78916c]"/></label>
+{error&&<p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}<div className="mt-6 flex gap-3"><button type="button" onClick={()=>{setShowEdit(false);setError("");}} className="flex-1 rounded-full border border-[#dce2d7] px-5 py-3.5 text-sm font-semibold">Cancel</button><button disabled={busy} className="flex-1 rounded-full bg-[#244b38] px-5 py-3.5 text-sm font-semibold text-white disabled:opacity-60">{busy?"Saving…":"Save changes"}</button></div></form></div>}
     {showAdd && <div className="fixed inset-0 z-50 grid place-items-center bg-[#18251d]/40 p-4" role="dialog" aria-modal="true"><form action={addPerson} className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-[#fffefa] p-6 shadow-2xl sm:p-8"><div className="flex items-start justify-between"><div><p className="text-xs font-semibold uppercase tracking-widest text-[#879184]">Grow your family</p><h2 className="mt-2 text-2xl font-semibold">Add a member</h2></div><button type="button" onClick={()=>setShowAdd(false)} aria-label="Close" className="rounded-full border px-3 py-1.5">×</button></div>
       <label className="mt-6 block text-sm font-medium">Full name *<input name="display_name" required maxLength={160} placeholder="Enter full name" className="mt-2 w-full rounded-xl border border-[#dfe4da] bg-white px-4 py-3 outline-none focus:border-[#78916c]"/></label>
       <label className="mt-4 block text-sm font-medium">Name in Hindi / native script<input name="native_name" maxLength={160} placeholder="नाम (वैकल्पिक)" className="mt-2 w-full rounded-xl border border-[#dfe4da] bg-white px-4 py-3 outline-none focus:border-[#78916c]"/></label>
