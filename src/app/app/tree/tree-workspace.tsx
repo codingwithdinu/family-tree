@@ -15,11 +15,12 @@ export function TreeWorkspace({ family, initialPeople, initialRelationships, rol
   const [relationships, setRelationships] = useState(initialRelationships);
   const [selected, setSelected] = useState<Person | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [addRelation, setAddRelation] = useState<"none" | "parent" | "child" | "spouse" | "partner">("none");
   const [showEdit, setShowEdit] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const canEdit = role === "owner" || role === "editor";
-  const graph = useMemo(() => buildGraph(people, relationships, (personId) => { const person = people.find(p => p.id === personId); if (person) { setSelected(person); setShowAdd(true); setError(""); } }), [people, relationships]);
+  const graph = useMemo(() => buildGraph(people, relationships, (personId, relation) => { const person = people.find(p => p.id === personId); if (person) { setSelected(person); setAddRelation(relation); setShowAdd(true); setError(""); } }), [people, relationships]);
 
   async function addPerson(formData: FormData) {
     setBusy(true); setError("");
@@ -114,7 +115,7 @@ export function TreeWorkspace({ family, initialPeople, initialRelationships, rol
   return <main className="min-h-screen bg-[#f8f7f2] text-[#24372d]">
     <header className="flex flex-wrap items-center justify-between gap-4 border-b border-[#e7e9e0] bg-[#fffefa] px-5 py-4 sm:px-8">
       <div className="flex items-center gap-3"><Link href="/" className="grid h-10 w-10 place-items-center rounded-2xl bg-[#244b38] font-semibold text-white">V</Link><div><p className="text-xs text-[#879184]">Your private family</p><h1 className="font-semibold">{family.name}</h1></div><span className="rounded-full bg-[#edf2e8] px-3 py-1 text-xs text-[#52714f]">Private</span></div>
-      <div className="flex gap-2"><Link href="/app/assistant" className="rounded-full border border-[#dce2d7] px-4 py-2.5 text-sm">Family AI</Link>{canEdit && <button onClick={() => {setShowAdd(true);setError("");}} className="rounded-full bg-[#244b38] px-5 py-2.5 text-sm font-semibold text-white">+ Add member</button>}</div>
+      <div className="flex gap-2"><Link href="/app/assistant" className="rounded-full border border-[#dce2d7] px-4 py-2.5 text-sm">Family AI</Link>{canEdit && <button onClick={() => {setSelected(null);setAddRelation("none");setShowAdd(true);setError("");}} className="rounded-full bg-[#244b38] px-5 py-2.5 text-sm font-semibold text-white">+ Add member</button>}</div>
     </header>
     <div className="grid min-h-[calc(100vh-73px)] lg:grid-cols-[1fr_310px]">
       <section className="relative min-h-[70vh] border-b border-[#e7e9e0] lg:border-b-0 lg:border-r">
@@ -141,7 +142,7 @@ export function TreeWorkspace({ family, initialPeople, initialRelationships, rol
       <div className="mt-5 rounded-2xl border border-[#e5e9df] bg-[#f8f9f5] p-4">
         <p className="text-sm font-semibold text-[#344b3b]">How are they connected?</p>
         <p className="mt-1 text-xs leading-5 text-[#879184]">Choose the relationship to another person already in your family tree.</p>
-        <label className="mt-4 block text-sm font-medium">Relationship<select name="relation" defaultValue={selected ? "child" : "none"} className="mt-2 w-full rounded-xl border border-[#dfe4da] bg-white px-4 py-3"><option value="none">Not connected yet</option><option value="parent">Parent of selected member (father / mother)</option><option value="child">Child of selected member (son / daughter)</option><option value="spouse">Spouse (wife / husband)</option><option value="partner">Partner</option></select></label>
+        <label className="mt-4 block text-sm font-medium">Relationship<select name="relation" defaultValue={addRelation} className="mt-2 w-full rounded-xl border border-[#dfe4da] bg-white px-4 py-3"><option value="none">Not connected yet</option><option value="parent">Parent of selected member (father / mother)</option><option value="child">Child of selected member (son / daughter)</option><option value="spouse">Spouse (wife / husband)</option><option value="partner">Partner</option></select></label>
         <label className="mt-4 block text-sm font-medium">Connect to family member<select name="related_person_id" defaultValue={selected?.id ?? ""} className="mt-2 w-full rounded-xl border border-[#dfe4da] bg-white px-4 py-3"><option value="">Choose a person</option>{people.map(p=><option key={p.id} value={p.id}>{p.native_name||p.display_name}</option>)}</select></label>
         <label className="mt-4 block text-sm font-medium">Parent relationship type<select name="parent_role" defaultValue="biological" className="mt-2 w-full rounded-xl border border-[#dfe4da] bg-white px-4 py-3"><option value="biological">Biological</option><option value="adoptive">Adoptive</option><option value="step">Step-parent</option><option value="foster">Foster</option><option value="legal">Legal guardian</option><option value="unknown">Unknown</option></select><span className="mt-1 block text-xs font-normal text-[#8a9385]">Used when you choose a parent or child relationship.</span></label>
       </div>
@@ -149,7 +150,7 @@ export function TreeWorkspace({ family, initialPeople, initialRelationships, rol
   </main>;
 }
 
-function buildGraph(people: Person[], relationships: Relationship[], onAddRelative: (personId: string) => void): {nodes: Node[]; edges: Edge[]} {
+function buildGraph(people: Person[], relationships: Relationship[], onAddRelative: (personId: string, relation: "parent" | "child" | "spouse") => void): {nodes: Node[]; edges: Edge[]} {
   const valid = new Set(people.map(p=>p.id));
   const parents = new Map<string,string[]>(); const children = new Map<string,string[]>();
   for(const r of relationships.filter(r=>r.relationship_type==="parent_child"&&valid.has(r.from_person_id)&&valid.has(r.to_person_id))){parents.set(r.to_person_id,[...(parents.get(r.to_person_id)??[]),r.from_person_id]);children.set(r.from_person_id,[...(children.get(r.from_person_id)??[]),r.to_person_id]);}
@@ -160,14 +161,14 @@ function buildGraph(people: Person[], relationships: Relationship[], onAddRelati
   for(const row of groups.values())for(let i=0;i<row.length;i++){const r=relationships.find(r=>["spouse","partner"].includes(r.relationship_type)&&((r.from_person_id===row[i].id&&row.some(p=>p.id===r.to_person_id))||(r.to_person_id===row[i].id&&row.some(p=>p.id===r.from_person_id))));if(r){const id=r.from_person_id===row[i].id?r.to_person_id:r.from_person_id;const j=row.findIndex(p=>p.id===id);if(j>=0&&j!==i+1){const [partner]=row.splice(j,1);row.splice(i+1,0,partner);}}}
   const nodes:Node[]=people.map(p=>{const d=depth.get(p.id)??0;const row=groups.get(d)??[];const i=row.findIndex(x=>x.id===p.id);return {id:p.id,position:{x:i*250-(row.length-1)*125,y:d*220},style:{width:196,border:"none",background:"transparent",padding:0},data:{label:
     <div className="relative w-[196px] rounded-2xl border border-[#dce4d6] bg-[#fffefa] px-3 pb-4 pt-4 text-center shadow-[0_8px_24px_rgba(35,60,42,.10)] transition hover:border-[#8fa986] hover:shadow-[0_12px_30px_rgba(35,60,42,.16)]">
-      <button type="button" aria-label={`Add relative to ${p.display_name}`} title="Add relative" onClick={e=>{e.stopPropagation();onAddRelative(p.id);}} className="absolute -top-3 left-1/2 z-10 grid h-7 w-7 -translate-x-1/2 place-items-center rounded-full border-2 border-white bg-[#e67e22] text-lg font-medium leading-none text-white shadow-md transition hover:scale-110">+</button>
-      <button type="button" aria-label={`Add parent of ${p.display_name}`} title="Add parent" onClick={e=>{e.stopPropagation();onAddRelative(p.id);}} className="absolute -left-3 top-1/2 z-10 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full border-2 border-white bg-[#e67e22] text-lg leading-none text-white shadow-md transition hover:scale-110">+</button>
+      <button type="button" aria-label={`Add parent of ${p.display_name}`} title="Add parent" onClick={e=>{e.stopPropagation();onAddRelative(p.id,"parent");}} className="nodrag nopan absolute -top-3 left-1/2 z-10 grid h-7 w-7 -translate-x-1/2 place-items-center rounded-full border-2 border-white bg-[#e67e22] text-lg font-medium leading-none text-white shadow-md transition hover:scale-110">+</button>
+      <button type="button" aria-label={`Add parent of ${p.display_name}`} title="Add parent" onClick={e=>{e.stopPropagation();onAddRelative(p.id,"parent");}} className="nodrag nopan absolute -left-3 top-1/2 z-10 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full border-2 border-white bg-[#e67e22] text-lg leading-none text-white shadow-md transition hover:scale-110">+</button>
       <div className="mx-auto mb-2 grid h-14 w-14 place-items-center rounded-full bg-gradient-to-br from-[#f4e6cc] to-[#d8e6d1] font-serif text-2xl text-[#54734f]">{(p.native_name||p.display_name).slice(0,1)}</div>
       <div className="text-[10px] font-medium uppercase tracking-wide text-[#899386]">{p.gender==="male"?"Male":p.gender==="female"?"Female":"Family member"}</div>
       <div className="mt-1 truncate text-sm font-semibold text-[#2b4031]">{p.native_name||p.display_name}</div>
       {p.birth_date&&<div className="mt-2 inline-flex rounded-full bg-[#f7ead7] px-2 py-0.5 text-[10px] text-[#a66c28]">{p.birth_date.slice(0,4)}</div>}
-      <button type="button" aria-label={`Add child of ${p.display_name}`} title="Add child" onClick={e=>{e.stopPropagation();onAddRelative(p.id);}} className="absolute -bottom-3 left-1/2 z-10 grid h-7 w-7 -translate-x-1/2 place-items-center rounded-full border-2 border-white bg-[#e67e22] text-lg leading-none text-white shadow-md transition hover:scale-110">+</button>
-      <button type="button" aria-label={`Add spouse or partner of ${p.display_name}`} title="Add spouse / partner" onClick={e=>{e.stopPropagation();onAddRelative(p.id);}} className="absolute -right-3 top-1/2 z-10 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full border-2 border-white bg-[#e67e22] text-lg leading-none text-white shadow-md transition hover:scale-110">+</button>
+      <button type="button" aria-label={`Add child of ${p.display_name}`} title="Add child" onClick={e=>{e.stopPropagation();onAddRelative(p.id,"child");}} className="nodrag nopan absolute -bottom-3 left-1/2 z-10 grid h-7 w-7 -translate-x-1/2 place-items-center rounded-full border-2 border-white bg-[#e67e22] text-lg leading-none text-white shadow-md transition hover:scale-110">+</button>
+      <button type="button" aria-label={`Add spouse or partner of ${p.display_name}`} title="Add spouse / partner" onClick={e=>{e.stopPropagation();onAddRelative(p.id,"spouse");}} className="nodrag nopan absolute -right-3 top-1/2 z-10 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full border-2 border-white bg-[#e67e22] text-lg leading-none text-white shadow-md transition hover:scale-110">+</button>
     </div>},type:"default"};});
   const edges:Edge[]=relationships.filter(r=>valid.has(r.from_person_id)&&valid.has(r.to_person_id)).map(r=>({id:r.id,source:r.from_person_id,target:r.to_person_id,type:r.relationship_type==="spouse"||r.relationship_type==="partner"?"straight":"smoothstep",label:r.relationship_type==="spouse"?"Spouse":r.relationship_type==="partner"?"Partner":undefined,labelStyle:{fill:"#71816c",fontSize:10,fontWeight:600},labelBgStyle:{fill:"#fffefa",fillOpacity:.95},style:{stroke:r.relationship_type==="spouse"||r.relationship_type==="partner"?"#d28b43":"#9bad92",strokeWidth:r.relationship_type==="spouse"||r.relationship_type==="partner"?2:1.8}}));
   return {nodes,edges};
