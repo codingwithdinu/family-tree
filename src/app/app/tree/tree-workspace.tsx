@@ -25,8 +25,13 @@ export function TreeWorkspace({ family, initialPeople, initialRelationships, rol
     const name = String(formData.get("display_name") ?? "").trim();
     const nativeName = String(formData.get("native_name") ?? "").trim() || null;
     const gender = String(formData.get("gender") ?? "unspecified");
-    const parentId = String(formData.get("parent_id") ?? "");
+    const relatedPersonId = String(formData.get("related_person_id") ?? "");
+    const relation = String(formData.get("relation") ?? "none");
+    const parentRole = String(formData.get("parent_role") ?? "biological");
     if (!name) { setError("Please enter a name."); setBusy(false); return; }
+    if (relation !== "none" && (!relatedPersonId || !people.some(p => p.id === relatedPersonId))) {
+      setError("Please choose which family member this person is related to."); setBusy(false); return;
+    }
     try {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -34,8 +39,14 @@ export function TreeWorkspace({ family, initialPeople, initialRelationships, rol
       const { data: person, error: insertError } = await supabase.from("persons").insert({ family_id: family.id, display_name: name, native_name: nativeName, gender, created_by: user.id }).select("id,display_name,native_name,gender,birth_date,biography").single();
       if (insertError) throw insertError;
       let rel: Relationship | null = null;
-      if (parentId) {
-        const { data, error: relError } = await supabase.from("relationships").insert({ family_id: family.id, from_person_id: parentId, to_person_id: person.id, relationship_type: "parent_child", parent_role: "biological", created_by: user.id }).select("id,from_person_id,to_person_id,relationship_type,parent_role").single();
+      if (relation !== "none") {
+        const isParent = relation === "parent";
+        const isChild = relation === "child";
+        const relationshipType = relation === "spouse" ? "spouse" : relation === "partner" ? "partner" : "parent_child";
+        const fromId = isParent ? person.id : relatedPersonId;
+        const toId = isParent ? relatedPersonId : person.id;
+        const payload = { family_id: family.id, from_person_id: fromId, to_person_id: toId, relationship_type: relationshipType, parent_role: relationshipType === "parent_child" ? parentRole : null, created_by: user.id };
+        const { data, error: relError } = await supabase.from("relationships").insert(payload).select("id,from_person_id,to_person_id,relationship_type,parent_role").single();
         if (relError) {
           await supabase.from("persons").delete().eq("id", person.id).eq("family_id", family.id);
           throw relError;
@@ -45,6 +56,7 @@ export function TreeWorkspace({ family, initialPeople, initialRelationships, rol
       setPeople(old => [...old, person]);
       if (rel) setRelationships(old => [...old, rel!]);
       setShowAdd(false);
+      setSelected(person);
     } catch (e) { setError(e instanceof Error ? e.message : "Could not save this person."); }
     finally { setBusy(false); }
   }
@@ -67,7 +79,13 @@ export function TreeWorkspace({ family, initialPeople, initialRelationships, rol
       <label className="mt-6 block text-sm font-medium">Full name *<input name="display_name" required maxLength={160} placeholder="Enter full name" className="mt-2 w-full rounded-xl border border-[#dfe4da] bg-white px-4 py-3 outline-none focus:border-[#78916c]"/></label>
       <label className="mt-4 block text-sm font-medium">Name in Hindi / native script<input name="native_name" maxLength={160} placeholder="नाम (वैकल्पिक)" className="mt-2 w-full rounded-xl border border-[#dfe4da] bg-white px-4 py-3 outline-none focus:border-[#78916c]"/></label>
       <label className="mt-4 block text-sm font-medium">Gender (optional)<select name="gender" className="mt-2 w-full rounded-xl border border-[#dfe4da] bg-white px-4 py-3"><option value="unspecified">Prefer not to specify</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select></label>
-      <label className="mt-4 block text-sm font-medium">Child of (optional)<select name="parent_id" className="mt-2 w-full rounded-xl border border-[#dfe4da] bg-white px-4 py-3"><option value="">No parent connection yet</option>{people.map(p=><option key={p.id} value={p.id}>{p.native_name||p.display_name}</option>)}</select><span className="mt-1 block text-xs font-normal text-[#8a9385]">Creates a parent → child link. More relationship types will be added next.</span></label>
+      <div className="mt-5 rounded-2xl border border-[#e5e9df] bg-[#f8f9f5] p-4">
+        <p className="text-sm font-semibold text-[#344b3b]">How are they connected?</p>
+        <p className="mt-1 text-xs leading-5 text-[#879184]">Choose the relationship to another person already in your family tree.</p>
+        <label className="mt-4 block text-sm font-medium">Relationship<select name="relation" defaultValue={selected ? "child" : "none"} className="mt-2 w-full rounded-xl border border-[#dfe4da] bg-white px-4 py-3"><option value="none">Not connected yet</option><option value="parent">Parent of selected member (father / mother)</option><option value="child">Child of selected member (son / daughter)</option><option value="spouse">Spouse (wife / husband)</option><option value="partner">Partner</option></select></label>
+        <label className="mt-4 block text-sm font-medium">Connect to family member<select name="related_person_id" defaultValue={selected?.id ?? ""} className="mt-2 w-full rounded-xl border border-[#dfe4da] bg-white px-4 py-3"><option value="">Choose a person</option>{people.map(p=><option key={p.id} value={p.id}>{p.native_name||p.display_name}</option>)}</select></label>
+        <label className="mt-4 block text-sm font-medium">Parent relationship type<select name="parent_role" defaultValue="biological" className="mt-2 w-full rounded-xl border border-[#dfe4da] bg-white px-4 py-3"><option value="biological">Biological</option><option value="adoptive">Adoptive</option><option value="step">Step-parent</option><option value="foster">Foster</option><option value="legal">Legal guardian</option><option value="unknown">Unknown</option></select><span className="mt-1 block text-xs font-normal text-[#8a9385]">Used when you choose a parent or child relationship.</span></label>
+      </div>
       {error && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}<button disabled={busy} className="mt-6 w-full rounded-full bg-[#244b38] px-6 py-3.5 font-semibold text-white disabled:opacity-60">{busy?"Saving...":"Save family member"}</button></form></div>}
   </main>;
 }
