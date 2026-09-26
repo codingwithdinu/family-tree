@@ -71,7 +71,7 @@ export async function POST(request: Request) {
   };
   const questionNorm=norm(question);
   // Resolve explicit "X ka relation Y se kya" / "X Y ka kya lagta hai".
-  const mentioned=allNames.filter(x=>questionNorm.includes(x.norm));
+  const mentioned=allNames.filter(x=>questionNorm.includes(x.norm)).sort((a,b)=>questionNorm.indexOf(a.norm)-questionNorm.indexOf(b.norm));
   if(mentioned.length>=2){
     const first=mentioned[0].p,second=mentioned[1].p;
     const rel=relationBetween(first.id,second.id);
@@ -97,7 +97,7 @@ export async function POST(request: Request) {
     }
     const targets=current.map(personById).filter(Boolean);
     if(targets.length===1&&self){
-      const rel=relationBetween(self.id,targets[0].id);
+      const rel=relationBetween(targets[0].id,self.id);
       if(rel)return NextResponse.json({answer:`${nameOf(targets[0])} tumhare ${rel} hain/hain (saved family tree ke according).`});
     }
     if(targets.length===1)return NextResponse.json({answer:`${nameOf(anchor)} ke diye gaye relation chain ka result: ${nameOf(targets[0])}. Apna perspective set karne ke liye dropdown mein apna naam select karo, phir pucho “ye mera kya lagta hai?”`});
