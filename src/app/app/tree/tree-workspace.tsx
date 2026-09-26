@@ -23,7 +23,7 @@ export function TreeWorkspace({ family, initialPeople, initialRelationships, rol
   const [error, setError] = useState("");
   const canEdit = role === "owner" || role === "editor";
   useEffect(() => { let active = true; const load = async () => { const supabase = createClient(); const entries = await Promise.all(people.filter(p=>p.avatar_path).map(async p=>{ const {data,error}=await supabase.storage.from("family-photos").createSignedUrl(p.avatar_path!,3600); return [p.id,error?"":data.signedUrl] as const; })); if(active) setPhotoUrls(Object.fromEntries(entries.filter(([,url])=>url))); }; void load(); return ()=>{active=false;}; },[people]);
-  const graph = useMemo(() => buildGraph(people, relationships, (personId, relation) => { const person = people.find(p => p.id === personId); if (person) { setSelected(person); setAddRelation(relation); setShowAdd(true); setError(""); } }), [people, relationships, photoUrls]);
+  const graph = useMemo(() => buildGraph(people, relationships, photoUrls, (personId, relation) => { const person = people.find(p => p.id === personId); if (person) { setSelected(person); setAddRelation(relation); setShowAdd(true); setError(""); } }), [people, relationships, photoUrls]);
   const [diagramNodes, setDiagramNodes, onNodesChange] = useNodesState(graph.nodes);
   useEffect(() => { let saved: Record<string,{x:number;y:number}> = {}; try { saved = JSON.parse(localStorage.getItem("vansh-tree-layout:"+family.id) || "{}"); } catch {} setDiagramNodes(current => { const previous = new Map(current.map(n => [n.id, n.position])); return graph.nodes.map(n => ({...n, position: saved[n.id] ?? previous.get(n.id) ?? n.position})); }); }, [graph.nodes, setDiagramNodes, family.id]);
   function resetDiagramLayout() { localStorage.removeItem("vansh-tree-layout:"+family.id); setDiagramNodes(graph.nodes.map(n=>({...n,position:{...n.position}}))); }
@@ -180,7 +180,7 @@ export function TreeWorkspace({ family, initialPeople, initialRelationships, rol
   </main>;
 }
 
-function buildGraph(people: Person[], relationships: Relationship[], onAddRelative: (personId: string, relation: "parent" | "child" | "spouse") => void): {nodes: Node[]; edges: Edge[]} {
+function buildGraph(people: Person[], relationships: Relationship[], photoUrls: Record<string,string>, onAddRelative: (personId: string, relation: "parent" | "child" | "spouse") => void): {nodes: Node[]; edges: Edge[]} {
   const valid = new Set(people.map(p=>p.id));
   const parents = new Map<string,string[]>(); const children = new Map<string,string[]>();
   for(const r of relationships.filter(r=>["parent_child","parent-child","parentchild"].includes(r.relationship_type.toLowerCase().replace(/\s+/g,""))&&valid.has(r.from_person_id)&&valid.has(r.to_person_id))){parents.set(r.to_person_id,[...(parents.get(r.to_person_id)??[]),r.from_person_id]);children.set(r.from_person_id,[...(children.get(r.from_person_id)??[]),r.to_person_id]);}
