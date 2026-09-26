@@ -23,5 +23,3 @@ function CreateFamilyForm() {
 }
 
 function SetupNotice() { return <main className="min-h-screen bg-[#f8f7f2] p-8"><div className="mx-auto max-w-xl rounded-3xl bg-white p-8"><h1 className="text-2xl font-semibold">Connect Supabase to continue</h1><p className="mt-3 text-[#68746a]">Add your Supabase project URL and anon key to the Vercel environment variables or local .env.local file, then apply the SQL migration in supabase/migrations.</p><Link className="mt-6 inline-block text-[#416246] underline" href="https://supabase.com/dashboard">Open Supabase dashboard</Link></div></main>; }
-
-import { CreateFamilyForm as _Unused } from "./tree-workspace";
