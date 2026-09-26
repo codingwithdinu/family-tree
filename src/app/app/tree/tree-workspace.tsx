@@ -251,7 +251,8 @@ function buildGraph(people: Person[], relationships: Relationship[], photoUrls: 
   }
   const xById=new Map<string,number>();
   const unitX=new Map<string,number>();
-  const unitWidth=(unitId:string)=>{const count=unitMembers.get(unitId)?.length??1;return count*196+(count-1)*24;};
+  const CARD_WIDTH=196; const SPOUSE_GAP=48; const SIBLING_GAP=110; const FAMILY_GAP=180; const GENERATION_GAP=380;
+  const unitWidth=(unitId:string)=>{const count=unitMembers.get(unitId)?.length??1;return count*CARD_WIDTH+(count-1)*SPOUSE_GAP;};
   const maxDepth=Math.max(0,...Array.from(depth.values()));
   for(let d=0;d<=maxDepth;d++){
     const rowUnits=Array.from(unitMembers.keys()).filter(id=>unitDepth.get(id)===d);
@@ -269,22 +270,22 @@ function buildGraph(people: Person[], relationships: Relationship[], photoUrls: 
     let cursor=-Infinity;
     for(const cluster of clusters){
       const widths=cluster.units.map(unitWidth);
-      const total=widths.reduce((sum,w)=>sum+w,0)+Math.max(0,cluster.units.length-1)*70;
+      const total=widths.reduce((sum,w)=>sum+w,0)+Math.max(0,cluster.units.length-1)*SIBLING_GAP;
       let left=cluster.anchor-total/2;
-      if(left<cursor+70)left=cursor+70;
+      if(left<cursor+FAMILY_GAP)left=cursor+FAMILY_GAP;
       for(let i=0;i<cluster.units.length;i++){
         const unitId=cluster.units[i],width=widths[i];
         const center=left+width/2;
         unitX.set(unitId,center);
         const members=unitMembers.get(unitId)??[];
         let memberX=left;
-        for(const member of members){xById.set(member.id,memberX);memberX+=220;}
-        left+=width+70;
+        for(const member of members){xById.set(member.id,memberX);memberX+=CARD_WIDTH+SPOUSE_GAP;}
+        left+=width+SIBLING_GAP;
       }
-      cursor=left-70;
+      cursor=left-SIBLING_GAP;
     }
   }
-  const nodes:Node[]=people.map(p=>{const d=depth.get(p.id)??0;return {id:p.id,position:{x:xById.get(p.id)??0,y:d*300},style:{width:196,border:"none",background:"transparent",padding:0},data:{label:
+  const nodes:Node[]=people.map(p=>{const d=depth.get(p.id)??0;return {id:p.id,position:{x:xById.get(p.id)??0,y:d*GENERATION_GAP},style:{width:196,border:"none",background:"transparent",padding:0},data:{label:
     <div className="relative w-[196px] rounded-2xl border border-[#dce4d6] bg-[#fffefa] px-3 pb-4 pt-4 text-center shadow-[0_8px_24px_rgba(35,60,42,.10)] transition hover:border-[#8fa986] hover:shadow-[0_12px_30px_rgba(35,60,42,.16)]">
       <Handle id="target-top" type="target" position={Position.Top} className="!h-2 !w-2 !border-0 !bg-[#9bad92] !opacity-100" />
       <Handle id="source-bottom" type="source" position={Position.Bottom} className="!h-2 !w-2 !border-0 !bg-[#9bad92] !opacity-100" />
