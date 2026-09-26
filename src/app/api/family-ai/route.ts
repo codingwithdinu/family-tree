@@ -95,12 +95,13 @@ export async function POST(request: Request) {
       else if(/^(?:maa|mother|mom|mummy)$/.test(step))current=Array.from(new Set(current.flatMap(parentIds).filter(id=>personById(id)?.gender==="female")));
       else if(/^(?:wife|patni|biwi|husband|pati)$/.test(step))current=Array.from(new Set(current.flatMap(spouseIds)));
     }
-    const targets=current.map(personById).filter(Boolean);
-    if(targets.length===1&&self){
-      const rel=relationBetween(targets[0].id,self.id);
-      if(rel)return NextResponse.json({answer:`${nameOf(targets[0])} tumhare ${rel} hain/hain (saved family tree ke according).`});
+    const targets=current.map(personById).filter((person):person is NonNullable<typeof person>=>Boolean(person));
+    const singleTarget=targets[0];
+    if(singleTarget&&targets.length===1&&self){
+      const rel=relationBetween(singleTarget.id,self.id);
+      if(rel)return NextResponse.json({answer:`${nameOf(singleTarget)} tumhare ${rel} hain/hain (saved family tree ke according).`});
     }
-    if(targets.length===1)return NextResponse.json({answer:`${nameOf(anchor)} ke diye gaye relation chain ka result: ${nameOf(targets[0])}. Apna perspective set karne ke liye dropdown mein apna naam select karo, phir pucho “ye mera kya lagta hai?”`});
+    if(singleTarget&&targets.length===1)return NextResponse.json({answer:`${nameOf(anchor)} ke diye gaye relation chain ka result: ${nameOf(singleTarget)}. Apna perspective set karne ke liye dropdown mein apna naam select karo, phir pucho “ye mera kya lagta hai?”`});
     if(targets.length>1)return NextResponse.json({answer:`Saved links ke basis par multiple matching members mile: ${targets.map(nameOf).join(", ")}. Exact person identify karne ke liye inmein se kaun sa member hai, batao.`});
   }
   const apiKey=process.env.GROQ_API_KEY;
